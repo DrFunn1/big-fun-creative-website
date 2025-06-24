@@ -5,159 +5,101 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Ghost Tunnel Corridor Simulation</title>
   <style>
-    body { margin: 0; overflow: hidden; font-family: sans-serif; }
-    #simCanvas { display: block; background: #111; }
-    .dg { z-index: 10 !important; }
+    body { margin: 0; display: flex; justify-content: center; align-items: center; height: 100vh; background: #222; }
+    #simCanvas { background: #111; }
+    .dg { z-index: 10; }
   </style>
   <!-- dat.GUI CDN -->
-  <script src="https://cdn.jsdelivr.net/npm/dat.gui@0.7.9/build/dat.gui.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dat.gui@0.7.9/build/dat.gui.min.js" defer></script>
 </head>
 <body>
   <canvas id="simCanvas"></canvas>
-  <script>
-    // ---- Parameters ----
-    const L = 12, W = 3.3, D = 0.3;                // corridor dims & dot diameter
-    const params = {
-      scenario: 'Medium',                         // density scenario
-      densityOptions: { 'Low': 8, 'Medium': 16, 'High': 24, 'Extreme': 32 },
-      greetProb: 0.1,                             // greeting chance per second
-      slipProb: 0.9,                              // slip yield probability
-      start: () => startSim(),
-      reset: () => initSim()
+  <script defer>
+    // Debug error handler
+    window.onerror = function(msg, url, lineNo, columnNo, error) {
+      console.error("Error: " + msg + " at " + lineNo + ":" + columnNo);
     };
-    const dt = 0.016;                             // 60 FPS timestep
-    let agents = [], running = false;
-
-    // ---- Canvas Setup ----
-    const canvas = document.getElementById('simCanvas');
-    const ctx = canvas.getContext('2d');
-    function resize() {
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
-    }
-    window.addEventListener('resize', resize);
-    resize();
-
-    // ---- GUI ----
-    const gui = new dat.GUI();
-    gui.add(params, 'scenario', Object.keys(params.densityOptions)).name('Density');
-    gui.add(params, 'greetProb', 0, 1, 0.01).name('Greet Prob');
-    gui.add(params, 'slipProb', 0, 1, 0.01).name('Slip Prob');
-    gui.add(params, 'start').name('Start');
-    gui.add(params, 'reset').name('Reset');
-
-    // ---- Poisson-Disk Spawn ----
-    function poissonSpawn(count) {
-      const samples = [];
-      const maxTries = 10000;
-      while (samples.length < count && maxTries) {
-        const y = D/2 + Math.random()*(W - D);
-        if (!samples.some(s => Math.abs(s - y) < D)) samples.push(y);
+    window.onload = function() {
+      console.log("Simulation script loaded");
+      // Corridor dims
+      const L=12, W=3.3, D=0.3, dt=0.016;
+      const params = {
+        scenario:'Medium', densities:{Low:8,Medium:16,High:24,Extreme:32},
+        greetProb:0.1, slipProb:0.9,
+        start:startSim, reset:initSim
+      };
+      let agents=[], running=false;
+      const c=document.getElementById('simCanvas');
+      const ctx=c.getContext('2d');
+      // Resize
+      function resizeCanvas(){
+        const vw=window.innerWidth, vh=window.innerHeight;
+        const aspect=W/L;
+        if(vh/vw<aspect){c.height=vh; c.width=vh/aspect;} else {c.width=vw; c.height=vw*aspect;}
+        console.log(`Canvas ${c.width}x${c.height}`);
       }
-      return samples;
-    }
-
-    // ---- Agent Creation ----
-    function generateAgents(N) {
-      const half = Math.floor(N/2);
-      const ysLR = poissonSpawn(half);
-      const ysRL = poissonSpawn(N - half);
-      const arr = [];
-      ysLR.forEach(y => arr.push({ x:0,   y, dir:1, state:'walk', t:0 }));
-      ysRL.forEach(y => arr.push({ x:L,   y, dir:-1,state:'walk', t:0 }));
-      return arr;
-    }
-
-    // ---- Simulation Step ----
-    function stepSimulation() {
-      // Spatial hash bins
-      const bins = new Map();
-      const cell = D;
-      function hash(a) {
-        const ix = Math.floor(a.x / cell), iy = Math.floor(a.y / cell);
-        const key = ix + ',' + iy;
-        if (!bins.has(key)) bins.set(key, []);
-        bins.get(key).push(a);
-      }
-      agents.forEach(a => hash(a));
-
-      // Move each agent
-      agents.forEach(a => {
-        if (a.state === 'greet') {
-          a.t -= dt;
-          if (a.t <= 0) a.state = 'walk';
-          return;
+      window.addEventListener('resize', resizeCanvas);
+      resizeCanvas();
+      // GUI
+      const gui=new dat.GUI();
+      gui.add(params,'scenario',Object.keys(params.densities)).name('Density');
+      gui.add(params,'greetProb',0,1,0.01).name('Greet %');
+      gui.add(params,'slipProb',0,1,0.01).name('Slip %');
+      gui.add(params,'start').name('Start');
+      gui.add(params,'reset').name('Reset');
+      // Spawn
+      function generateAgents(N){
+        const list=[];
+        for(let i=0;i<N;i++){
+          let tries=0;
+          while(tries++<1000){
+            const x=Math.random()*L;
+            const y=D/2+Math.random()*(W-D);
+            if(list.every(a=>Math.hypot(a.x-x,a.y-y)>=D)){
+              list.push({x,y,dir:i<N/2?1:-1,state:'walk',timer:0});
+              break;
+            }
+          }
         }
-        // desired velocity
-        let vx = a.dir * 1.2, vy = 0;
-        const Ax = 0, Ay = 0;
-        // find neighbors in adjacent bins
-        const ix = Math.floor(a.x / cell), iy = Math.floor(a.y / cell);
-        for (let dx=-1; dx<=1; dx++) for (let dy=-1; dy<=1; dy++) {
-          const key = (ix+dx)+','+(iy+dy);
-          const list = bins.get(key) || [];
-          list.forEach(b => {
-            if (b === a) return;
-            // predict positions
-            const pax = a.x + vx*dt, pay = a.y;
-            const pbx = b.x + b.dir*1.2*dt, pby = b.y;
-            let dxp = pax - pbx, dyp = pay - pby;
-            const dist = Math.hypot(dxp, dyp);
-            // hard separation
-            if (dist < D) {
-              const overlap = D - dist;
-              const nx = dxp/dist, ny = dyp/dist;
-              vx += nx * overlap / dt;
-              vy += ny * overlap / dt;
-            }
-            // greeting
-            if (dist < 1.1*D && Math.random() < params.greetProb*dt) {
-              a.state = b.state = 'greet';
-              a.t = b.t = 1;
-            }
+        return list;
+      }
+      // Step
+      function stepSim(){
+        agents.forEach(a=>{
+          if(a.state==='greet'){a.timer-=dt; if(a.timer<=0)a.state='walk';return;}
+          let vx=a.dir*1.2, vy=0;
+          agents.forEach(b=>{
+            if(b===a)return;
+            const pax=a.x+vx*dt, pay=a.y;
+            const pbx=b.x+b.dir*1.2*dt, pby=b.y;
+            const dx=pax-pbx, dy=pay-pby;
+            const dist=Math.hypot(dx,dy);
+            if(dist<4*D&&Math.random()<params.slipProb) vy+=a.dir*0.3*((4*D-dist)/(4*D));
+            if(dist<D){const overlap=D-dist, nx=dx/dist, ny=dy/dist; vx+=nx*(overlap/dt); vy+=ny*(overlap/dt);}            
+            if(dist<1.1*D&&Math.random()<params.greetProb*dt){a.state=b.state='greet';a.timer=b.timer=1;}
           });
-        }
-        // wall enforce
-        const nextY = a.y + vy*dt;
-        if (nextY < D/2) vy += (D/2 - nextY) / dt;
-        if (nextY > W-D/2) vy += ((W-D/2) - nextY) / dt;
-        // apply
-        a.x += vx*dt; a.y += vy*dt;
-        // wrap ends
-        if (a.x < 0) a.x = L;
-        if (a.x > L) a.x = 0;
-      });
-    }
-
-    // ---- Draw ----
-    function draw() {
-      ctx.clearRect(0,0,canvas.width,canvas.height);
-      agents.forEach(a => {
-        const px = (a.x/L)*canvas.width;
-        const py = (a.y/W)*canvas.height;
-        const pr = (D/2/L)*canvas.width;
-        ctx.beginPath();
-        ctx.arc(px, py, pr, 0, 2*Math.PI);
-        ctx.fillStyle = a.state==='greet'?'#f00':'#0f0';
-        ctx.fill();
-      });
-    }
-
-    // ---- Control ----
-    function initSim() {
-      const N = params.densityOptions[params.scenario];
-      agents = generateAgents(N);
-      running = false; draw();
-    }
-    function startSim() {
-      if (!running) { running = true; loop(); }
-    }
-    function loop() {
-      if (!running) return;
-      stepSimulation(); draw();
-      requestAnimationFrame(loop);
-    }
-    initSim();
+          const nextY=a.y+vy*dt;
+          if(nextY<D/2) vy+=(D/2-nextY)/dt;
+          if(nextY>W-D/2) vy+=((W-D/2)-nextY)/dt;
+          a.x+=vx*dt; a.y+=vy*dt;
+          if(a.x<0) a.x+=L; if(a.x>L) a.x-=L;
+        });
+      }
+      // Draw
+      function draw(){
+        ctx.clearRect(0,0,c.width,c.height);
+        agents.forEach(a=>{
+          const px=(a.x/L)*c.width, py=(a.y/W)*c.height, pr=(D/2/L)*c.width;
+          ctx.beginPath(); ctx.arc(px,py,pr,0,2*Math.PI);
+          ctx.fillStyle=a.state==='greet'?'#f00':'#0f0'; ctx.fill();
+        });
+      }
+      // Control
+      function initSim(){agents=generateAgents(params.densities[params.scenario]);running=false;draw();}
+      function startSim(){if(!running){running=true;tick();}}
+      function tick(){if(!running)return;stepSim();draw();requestAnimationFrame(tick);}
+      initSim();
+    };
   </script>
 </body>
 </html>

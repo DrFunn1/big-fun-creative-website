@@ -15,26 +15,29 @@
 <body>
   <canvas id="simCanvas"></canvas>
   <script>
-    // ---- Ensure script runs after DOM loads ----
     document.addEventListener('DOMContentLoaded', () => {
-      // Corridor dims
-      const L = 12, W = 3.3, D = 0.3, dt = 0.016;
+      // Corridor dims, timestep, and collision radius multiplier
+      const L = 12, W = 3.3, D = 0.6, dt = 0.008, S = 2;
+      const collisionRadius = D * S;
+
+      // UI parameters (including new spacing slider)
       const params = {
         scenario: 'Medium',
         densities: { Low: 8, Medium: 16, High: 24, Extreme: 32 },
         greetProb: 0.1,
         slipProb: 0.9,
+        spacing: S,
         start: startSim,
         reset: initSim
       };
+
       let agents = [], running = false;
 
-      // Canvas setup with fixed aspect ratio
+      // Canvas setup to fixed aspect
       const canvas = document.getElementById('simCanvas');
       const ctx = canvas.getContext('2d');
       function resizeCanvas() {
-        const vw = window.innerWidth;
-        const vh = window.innerHeight;
+        const vw = window.innerWidth, vh = window.innerHeight;
         const aspect = W / L;
         if (vh / vw < aspect) {
           canvas.height = vh;
@@ -47,23 +50,24 @@
       window.addEventListener('resize', resizeCanvas);
       resizeCanvas();
 
-      // UI controls
+      // dat.GUI controls (add spacing slider)
       const gui = new dat.GUI();
       gui.add(params, 'scenario', Object.keys(params.densities)).name('Density');
       gui.add(params, 'greetProb', 0, 1, 0.01).name('Greet %');
       gui.add(params, 'slipProb', 0, 1, 0.01).name('Slip %');
+      gui.add(params, 'spacing', 1, 4, 0.1).name('Spacing x D').onChange(val => collisionRadius = val * D);
       gui.add(params, 'start').name('Start');
       gui.add(params, 'reset').name('Reset');
 
-      // Spawn: simple 2D rejection sampling
+      // Generate agents spread across entire hallway
       function generateAgents(N) {
         const list = [];
         for (let i = 0; i < N; i++) {
           let tries = 0;
           while (tries++ < 1000) {
             const x = Math.random() * L;
-            const y = D / 2 + Math.random() * (W - D);
-            if (list.every(a => Math.hypot(a.x - x, a.y - y) >= D)) {
+            const y = D/2 + Math.random() * (W - D);
+            if (list.every(a => Math.hypot(a.x - x, a.y - y) >= collisionRadius)) {
               const dir = i < N / 2 ? 1 : -1;
               list.push({ x, y, dir, state: 'walk', timer: 0 });
               break;
@@ -73,25 +77,30 @@
         return list;
       }
 
-      // Simulation step with early slip and hard separation
+      // Simulation step with updated spacing & speed & death at edges
       function stepSim() {
+        agents = agents.filter(a => a.x >= 0 && a.x <= L);
         for (const a of agents) {
           if (a.state === 'greet') {
             a.timer -= dt;
             if (a.timer <= 0) a.state = 'walk';
             continue;
           }
-          let vx = a.dir * 1.2, vy = 0;
+          let vx = a.dir * 0.6, vy = 0;  // half speed
           for (const b of agents) {
             if (b === a) continue;
-            const pax = a.x + vx * dt, pay = a.y;
-            const pbx = b.x + b.dir * 1.2 * dt, pby = b.y;
+            const pax = a.x + vx * dt;
+            const pay = a.y;
+            const pbx = b.x + b.dir * 0.6 * dt;
+            const pby = b.y;
             const dx = pax - pbx, dy = pay - pby;
             const dist = Math.hypot(dx, dy);
-            // Early slip at 4*D
-            if (dist < 4 * D && Math.random() < params.slipProb) {
-              vy += a.dir * 0.3 * ((4 * D - dist) / (4 * D));
+
+            // Early slip at collisionRadius
+            if (dist < collisionRadius && Math.random() < params.slipProb) {
+              vy += a.dir * 0.3 * ((collisionRadius - dist) / collisionRadius);
             }
+
             // Hard separation
             if (dist < D) {
               const overlap = D - dist;
@@ -99,22 +108,22 @@
               vx += nx * (overlap / dt);
               vy += ny * (overlap / dt);
             }
+
             // Greeting
             if (dist < 1.1 * D && Math.random() < params.greetProb * dt) {
               a.state = b.state = 'greet';
-              a.timer = b.timer = 1;
+              a.timer = b.timer = 1.0;
             }
           }
+
           // Wall clamp
           const nextY = a.y + vy * dt;
           if (nextY < D / 2) vy += (D / 2 - nextY) / dt;
           if (nextY > W - D / 2) vy += ((W - D / 2) - nextY) / dt;
-          // Update position
+
+          // Apply movement
           a.x += vx * dt;
           a.y += vy * dt;
-          // Wrap X
-          if (a.x < 0) a.x += L;
-          if (a.x > L) a.x -= L;
         }
       }
 
@@ -132,7 +141,7 @@
         }
       }
 
-      // Control functions
+      // Control
       function initSim() {
         agents = generateAgents(params.densities[params.scenario]);
         running = false;
@@ -148,7 +157,6 @@
         requestAnimationFrame(tick);
       }
 
-      // Start initial state
       initSim();
     });
   </script>

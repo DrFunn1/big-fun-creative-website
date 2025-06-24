@@ -45,9 +45,6 @@
         button:disabled:hover {
             background: #666;
         }
-        .recording {
-            background: #f44336;
-        }
         canvas {
             border: 2px solid #444;
             border-radius: 8px;
@@ -88,9 +85,10 @@
         
         <div class="controls">
             <select class="scenario-select" id="scenarioSelect">
-                <option value="scenario1">Scenario 1: Beeline + Wanderers + Meeting</option>
-                <option value="scenario2">Scenario 2: Multiple Groups</option>
-                <option value="scenario3">Scenario 3: Congestion Test</option>
+                <option value="scenario1">Scenario 1: Light Traffic (8 people)</option>
+                <option value="scenario2">Scenario 2: Moderate Traffic (12 people)</option>
+                <option value="scenario3">Scenario 3: Heavy Traffic (16 people)</option>
+                <option value="scenario4">Scenario 4: Congestion Test (20 people)</option>
             </select>
             <button id="playBtn">▶ Play & Record</button>
             <button id="stopBtn" disabled>⏹ Stop</button>
@@ -99,170 +97,276 @@
         </div>
 
         <div class="canvas-container">
-            <canvas id="hallwayCanvas" width="1200" height="300"></canvas>
-            <div class="camera-overlay" style="left: 0px; top: 0px; width: 600px; height: 300px;"></div>
-            <div class="camera-overlay" style="left: 600px; top: 0px; width: 600px; height: 300px;"></div>
+            <canvas id="hallwayCanvas" width="1200" height="330"></canvas>
+            <div class="camera-overlay" style="left: 0px; top: 15px; width: 600px; height: 300px;"></div>
+            <div class="camera-overlay" style="left: 600px; top: 15px; width: 600px; height: 300px;"></div>
         </div>
 
         <div class="info">
-            <p><strong>Hallway Dimensions:</strong> 12m × 3m with 30cm camera view barriers</p>
-            <p><strong>Camera Coverage:</strong> Full width coverage in two 6m×2.4m zones</p>
-            <p><strong>Output:</strong> WebM video optimized for OpenCV blob detection</p>
-            <p><strong>People:</strong> Represented as white circles (easy blob detection)</p>
+            <p><strong>Hallway Dimensions:</strong> 12m × 3.3m with Poisson disk spacing</p>
+            <p><strong>Camera Coverage:</strong> Full width coverage in two 6m×3m zones</p>
+            <p><strong>Algorithm:</strong> Hard separation constraint (≥30px) + spatial hashing</p>
+            <p><strong>People:</strong> White = walking, Blue = greeting, Green = avoiding</p>
         </div>
     </div>
 
     <script>
-        console.log("Script starting...");
+        console.log("Poisson disk simulation starting...");
 
         const canvas = document.getElementById('hallwayCanvas');
         const ctx = canvas.getContext('2d');
         
-        let people = [];
+        // Simulation parameters (10px = 1m scale)
+        const CORRIDOR_LENGTH = 1200; // 12m
+        const CORRIDOR_WIDTH = 330;   // 3.3m  
+        const DOT_DIAMETER = 30;      // 3m person width
+        const DOT_RADIUS = 15;
+        const SPEED = 1.0;            // pixels per frame
+        const DETECTION_RADIUS = 60;  // 2 * DOT_DIAMETER
+        const GREETING_RADIUS = 33;   // 1.1 * DOT_DIAMETER
+        const GREETING_PROB = 0.1;    // 10% chance
+        const GREETING_DURATION = 120; // 2 seconds at 60fps
+        const AVOIDANCE_WEIGHT = 0.5;
+        
+        let agents = [];
         let animationId = null;
         let startTime = null;
         let mediaRecorder = null;
         let recordedChunks = [];
-        let recordingCounter = { scenario1: 0, scenario2: 0, scenario3: 0 };
+        let recordingCounter = { scenario1: 0, scenario2: 0, scenario3: 0, scenario4: 0 };
+        let spatialGrid = {};
 
-        function constrainToBoundaries(person) {
-            // Keep people within camera view boundaries (30px barriers top/bottom)
-            if (person.y < 30) person.y = 30;
-            if (person.y > 270) person.y = 270;
-            
-            // Keep within hallway length
-            if (person.x < 15) person.x = 15;
-            if (person.x > 1185) person.x = 1185;
-        }
+        class Agent {
+            constructor(x, y, direction, speed = SPEED) {
+                this.x = x;
+                this.y = y;
+                this.direction = direction; // +1 for right, -1 for left
+                this.speed = speed;
+                this.vx = direction * speed;
+                this.vy = 0;
+                this.state = 'walking'; // 'walking', 'greeting', 'avoiding'
+                this.greetingTimer = 0;
+                this.active = true;
+            }
 
-        function createPerson(x, y, targetX, targetY, speed) {
-            return {
-                x: x,
-                y: y,
-                targetX: targetX,
-                targetY: targetY,
-                speed: speed || 1,
-                radius: 15,
-                active: true,
-                interactionTimer: 0,
-                avoidanceTimer: 0,
-                avoidanceAngle: 0
-            };
-        }
+            update() {
+                if (!this.active) return;
 
-        function updatePerson(person, allPeople) {
-            if (!person.active) return;
+                // Handle greeting state
+                if (this.state === 'greeting') {
+                    this.greetingTimer--;
+                    if (this.greetingTimer <= 0) {
+                        this.state = 'walking';
+                        this.vx = this.direction * this.speed;
+                        this.vy = 0;
+                    } else {
+                        this.vx = 0;
+                        this.vy = 0;
+                        return;
+                    }
+                }
 
-            const dx = person.targetX - person.x;
-            const dy = person.targetY - person.y;
-            const distance = Math.sqrt(dx * dx + dy * dy);
+                // Collision avoidance
+                const neighbors = this.getNeighbors();
+                let avoidanceX = 0;
+                let avoidanceY = 0;
 
-            if (distance > 5) {
-                // Calculate desired direction
-                let moveX = (dx / distance) * person.speed;
-                let moveY = (dy / distance) * person.speed;
-                
-                // Check for collisions with other people (1.5x radius = 22.5 pixels)
-                let blocked = false;
-                for (let other of allPeople) {
-                    if (other === person || !other.active) continue;
-                    
-                    const distToOther = Math.sqrt(
-                        (person.x - other.x) ** 2 + (person.y - other.y) ** 2
-                    );
-                    
-                    if (distToOther < 45) { // 1.5 * radius * 2 = collision detection
-                        blocked = true;
-                        person.interactionTimer++;
+                for (let neighbor of neighbors) {
+                    if (neighbor === this) continue;
+
+                    // Predict future positions
+                    const futureX = this.x + this.vx;
+                    const futureY = this.y + this.vy;
+                    const neighborFutureX = neighbor.x + neighbor.vx;
+                    const neighborFutureY = neighbor.y + neighbor.vy;
+
+                    const dx = futureX - neighborFutureX;
+                    const dy = futureY - neighborFutureY;
+                    const distance = Math.sqrt(dx * dx + dy * dy);
+
+                    // Check for potential collision
+                    if (distance < DOT_DIAMETER) {
+                        // Calculate avoidance force (always to the right of movement direction)
+                        const avoidanceStrength = (DOT_DIAMETER - distance) / DOT_DIAMETER;
+                        const perpX = -this.vy; // Perpendicular to velocity (right direction)
+                        const perpY = this.vx;
+                        const perpLength = Math.sqrt(perpX * perpX + perpY * perpY);
                         
-                        // After 5 seconds (300 frames at 60fps), start avoidance
-                        if (person.interactionTimer > 300) {
-                            person.avoidanceTimer = 120; // 2 second avoidance maneuver
-                            person.avoidanceAngle = Math.random() > 0.5 ? 1 : -1; // Random side
-                            person.interactionTimer = 0;
+                        if (perpLength > 0) {
+                            avoidanceX += (perpX / perpLength) * this.speed * avoidanceStrength;
+                            avoidanceY += (perpY / perpLength) * this.speed * avoidanceStrength;
                         }
+
+                        this.state = 'avoiding';
+                    }
+
+                    // Check for greeting opportunity
+                    if (distance < GREETING_RADIUS && 
+                        this.state === 'walking' && 
+                        neighbor.state === 'walking' &&
+                        Math.random() < GREETING_PROB / 60) { // Per-frame probability
+                        
+                        this.state = 'greeting';
+                        this.greetingTimer = GREETING_DURATION;
+                        neighbor.state = 'greeting';
+                        neighbor.greetingTimer = GREETING_DURATION;
+                        return;
+                    }
+                }
+
+                // Update velocity with avoidance
+                const desiredVx = this.direction * this.speed;
+                const desiredVy = 0;
+                
+                this.vx = desiredVx + AVOIDANCE_WEIGHT * avoidanceX;
+                this.vy = desiredVy + AVOIDANCE_WEIGHT * avoidanceY;
+
+                // Normalize velocity to maintain speed
+                const currentSpeed = Math.sqrt(this.vx * this.vx + this.vy * this.vy);
+                if (currentSpeed > 0) {
+                    this.vx = (this.vx / currentSpeed) * this.speed;
+                    this.vy = (this.vy / currentSpeed) * this.speed;
+                }
+
+                // Update position
+                this.x += this.vx;
+                this.y += this.vy;
+
+                // Constrain to corridor boundaries
+                this.y = Math.max(DOT_RADIUS + 15, Math.min(CORRIDOR_WIDTH - DOT_RADIUS - 15, this.y));
+
+                // Remove agent if they exit the corridor
+                if ((this.direction > 0 && this.x > CORRIDOR_LENGTH + DOT_RADIUS) ||
+                    (this.direction < 0 && this.x < -DOT_RADIUS)) {
+                    this.active = false;
+                }
+
+                // Reset state if no longer avoiding
+                if (this.state === 'avoiding') {
+                    this.state = 'walking';
+                }
+            }
+
+            getNeighbors() {
+                const cellSize = DOT_DIAMETER;
+                const cellX = Math.floor(this.x / cellSize);
+                const cellY = Math.floor(this.y / cellSize);
+                const neighbors = [];
+
+                // Check 3x3 grid around current cell
+                for (let dx = -1; dx <= 1; dx++) {
+                    for (let dy = -1; dy <= 1; dy++) {
+                        const key = `${cellX + dx},${cellY + dy}`;
+                        if (spatialGrid[key]) {
+                            for (let agent of spatialGrid[key]) {
+                                const distance = Math.sqrt(
+                                    (this.x - agent.x) ** 2 + (this.y - agent.y) ** 2
+                                );
+                                if (distance < DETECTION_RADIUS) {
+                                    neighbors.push(agent);
+                                }
+                            }
+                        }
+                    }
+                }
+                return neighbors;
+            }
+
+            draw() {
+                if (!this.active) return;
+
+                // Color based on state
+                switch (this.state) {
+                    case 'greeting':
+                        ctx.fillStyle = '#4488ff'; // Blue
+                        break;
+                    case 'avoiding':
+                        ctx.fillStyle = '#44ff88'; // Green
+                        break;
+                    default:
+                        ctx.fillStyle = 'white';
+                }
+
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, DOT_RADIUS, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
+        function poissonDiskSampling1D(min, max, minDistance, count) {
+            const positions = [];
+            const attempts = 1000;
+            
+            while (positions.length < count && attempts > 0) {
+                const candidate = min + Math.random() * (max - min);
+                let valid = true;
+                
+                for (let pos of positions) {
+                    if (Math.abs(candidate - pos) < minDistance) {
+                        valid = false;
                         break;
                     }
                 }
                 
-                if (!blocked) {
-                    person.interactionTimer = 0;
+                if (valid) {
+                    positions.push(candidate);
                 }
+            }
+            
+            return positions;
+        }
+
+        function updateSpatialGrid() {
+            spatialGrid = {};
+            const cellSize = DOT_DIAMETER;
+            
+            for (let agent of agents) {
+                if (!agent.active) continue;
                 
-                // Handle avoidance maneuver
-                if (person.avoidanceTimer > 0) {
-                    const avoidanceProgress = (120 - person.avoidanceTimer) / 120;
-                    let avoidanceMagnitude;
-                    
-                    // Ramp up first half, ramp down second half
-                    if (avoidanceProgress < 0.5) {
-                        avoidanceMagnitude = avoidanceProgress * 2; // 0 to 1
-                    } else {
-                        avoidanceMagnitude = 2 - (avoidanceProgress * 2); // 1 to 0
-                    }
-                    
-                    // Apply lateral motion (1.5 dot radius = 22.5 pixels max)
-                    const lateralForce = avoidanceMagnitude * 22.5 * person.avoidanceAngle;
-                    
-                    // Perpendicular to movement direction
-                    const perpX = -moveY; // Rotate 90 degrees
-                    const perpY = moveX;
-                    const perpLength = Math.sqrt(perpX * perpX + perpY * perpY);
-                    
-                    if (perpLength > 0) {
-                        moveX += (perpX / perpLength) * lateralForce * 0.1;
-                        moveY += (perpY / perpLength) * lateralForce * 0.1;
-                    }
-                    
-                    person.avoidanceTimer--;
-                    blocked = false; // Override blocking during avoidance
-                }
+                const cellX = Math.floor(agent.x / cellSize);
+                const cellY = Math.floor(agent.y / cellSize);
+                const key = `${cellX},${cellY}`;
                 
-                // Move if not blocked
-                if (!blocked) {
-                    person.x += moveX;
-                    person.y += moveY;
-                    constrainToBoundaries(person);
+                if (!spatialGrid[key]) {
+                    spatialGrid[key] = [];
                 }
-            } else {
-                person.active = false;
+                spatialGrid[key].push(agent);
             }
         }
 
-        function drawPerson(person) {
-            if (!person.active) return;
-
-            // Color based on state
-            if (person.interactionTimer > 0) {
-                ctx.fillStyle = '#ffff99'; // Light yellow during interaction
-            } else if (person.avoidanceTimer > 0) {
-                ctx.fillStyle = '#99ff99'; // Light green during avoidance
-            } else {
-                ctx.fillStyle = 'white';
+        function initScenario(agentCount) {
+            console.log(`Initializing scenario with ${agentCount} agents`);
+            agents = [];
+            
+            const agentsPerDirection = Math.floor(agentCount / 2);
+            const yMin = DOT_RADIUS + 15;
+            const yMax = CORRIDOR_WIDTH - DOT_RADIUS - 15;
+            
+            // Generate Poisson disk positions for each direction
+            const leftToRightPositions = poissonDiskSampling1D(yMin, yMax, DOT_DIAMETER, agentsPerDirection);
+            const rightToLeftPositions = poissonDiskSampling1D(yMin, yMax, DOT_DIAMETER, agentsPerDirection);
+            
+            // Create left-to-right agents
+            for (let y of leftToRightPositions) {
+                agents.push(new Agent(DOT_RADIUS, y, 1));
             }
             
-            ctx.beginPath();
-            ctx.arc(person.x, person.y, person.radius, 0, Math.PI * 2);
-            ctx.fill();
-            
-            // Show collision detection area during interactions
-            if (person.interactionTimer > 0) {
-                ctx.strokeStyle = 'rgba(255, 255, 0, 0.3)';
-                ctx.lineWidth = 1;
-                ctx.beginPath();
-                ctx.arc(person.x, person.y, 22.5, 0, Math.PI * 2);
-                ctx.stroke();
+            // Create right-to-left agents  
+            for (let y of rightToLeftPositions) {
+                agents.push(new Agent(CORRIDOR_LENGTH - DOT_RADIUS, y, -1));
             }
+            
+            console.log(`Created ${agents.length} agents`);
         }
 
         function drawBackground() {
             ctx.fillStyle = '#000000';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-            // Draw camera view boundaries (30px barriers top/bottom)
+            // Draw camera view boundaries (15px barriers top/bottom)
             ctx.fillStyle = '#333333';
-            ctx.fillRect(0, 0, 1200, 30); // Top barrier
-            ctx.fillRect(0, 270, 1200, 30); // Bottom barrier
+            ctx.fillRect(0, 0, CORRIDOR_LENGTH, 15); // Top barrier
+            ctx.fillRect(0, 315, CORRIDOR_LENGTH, 15); // Bottom barrier
 
             ctx.strokeStyle = '#666';
             ctx.lineWidth = 1;
@@ -270,79 +374,40 @@
             
             // Center line
             ctx.beginPath();
-            ctx.moveTo(0, 150);
-            ctx.lineTo(1200, 150);
+            ctx.moveTo(0, CORRIDOR_WIDTH / 2);
+            ctx.lineTo(CORRIDOR_LENGTH, CORRIDOR_WIDTH / 2);
             ctx.stroke();
 
-            // Camera boundaries - now cover full width
+            // Camera boundaries
             ctx.strokeStyle = '#004400';
             ctx.setLineDash([]);
-            ctx.strokeRect(0, 30, 600, 240);
-            ctx.strokeRect(600, 30, 600, 240);
+            ctx.strokeRect(0, 15, 600, 300);
+            ctx.strokeRect(600, 15, 600, 300);
 
-            // Add camera labels
             ctx.fillStyle = '#00ff00';
             ctx.font = '12px Arial';
-            ctx.fillText('Camera 1', 10, 50);
-            ctx.fillText('Camera 2', 610, 50);
-            
-            // Barrier labels
-            ctx.fillStyle = '#999999';
-            ctx.font = '10px Arial';
-            ctx.fillText('Camera View Boundary', 500, 20);
-            ctx.fillText('Camera View Boundary', 500, 290);
-        }
-
-        function initScenario1() {
-            console.log("Initializing scenario 1");
-            people = [
-                createPerson(50, 150, 1150, 150, 2),
-                createPerson(1150, 100, 50, 140, 0.8),
-                createPerson(1150, 200, 50, 160, 0.8),
-                createPerson(50, 80, 1150, 110, 1.2),
-                createPerson(50, 220, 1150, 190, 1.2)
-            ];
-            // Ensure all people start within boundaries
-            people.forEach(constrainToBoundaries);
-        }
-
-        function initScenario2() {
-            console.log("Initializing scenario 2");
-            people = [
-                createPerson(50, 75, 1150, 75, 1.5),
-                createPerson(70, 95, 1150, 95, 1.4),
-                createPerson(1150, 150, 50, 150, 1.1),
-                createPerson(1130, 170, 50, 170, 1.0),
-                createPerson(1110, 190, 50, 190, 1.2),
-                createPerson(600, 50, 600, 250, 0.7)
-            ];
-            // Ensure all people start within boundaries
-            people.forEach(constrainToBoundaries);
-        }
-
-        function initScenario3() {
-            console.log("Initializing scenario 3");
-            people = [];
-            for (let i = 0; i < 8; i++) {
-                const startSide = Math.random() > 0.5;
-                const startX = startSide ? 50 : 1150;
-                const endX = startSide ? 1150 : 50;
-                const y = 80 + (i * 20);
-                
-                people.push(createPerson(startX, y, endX, y + (Math.random() - 0.5) * 40, 0.5 + Math.random() * 1));
-            }
-            // Ensure all people start within boundaries
-            people.forEach(constrainToBoundaries);
+            ctx.fillText('Camera 1', 10, 35);
+            ctx.fillText('Camera 2', 610, 35);
         }
 
         function animate() {
             try {
                 drawBackground();
                 
-                people.forEach(person => {
-                    updatePerson(person, people);
-                    drawPerson(person);
-                });
+                updateSpatialGrid();
+                
+                // Update all agents
+                for (let agent of agents) {
+                    agent.update();
+                }
+                
+                // Draw all agents
+                for (let agent of agents) {
+                    agent.draw();
+                }
+                
+                // Remove inactive agents
+                agents = agents.filter(agent => agent.active);
 
                 if (startTime) {
                     const elapsed = (Date.now() - startTime) / 1000;
@@ -359,25 +424,19 @@
             console.log("Starting animation and recording:", scenario);
             stopAnimation();
             
-            switch(scenario) {
-                case 'scenario1':
-                    initScenario1();
-                    break;
-                case 'scenario2':
-                    initScenario2();
-                    break;
-                case 'scenario3':
-                    initScenario3();
-                    break;
-                default:
-                    initScenario1();
-            }
-
+            const agentCounts = {
+                scenario1: 8,
+                scenario2: 12,
+                scenario3: 16,
+                scenario4: 20
+            };
+            
+            initScenario(agentCounts[scenario] || 8);
+            
             startTime = Date.now();
             startRecording(scenario);
             animate();
             
-            // Update UI
             document.getElementById('playBtn').disabled = true;
             document.getElementById('stopBtn').disabled = false;
             document.getElementById('downloadBtn').disabled = true;
@@ -396,10 +455,9 @@
             
             const elapsed = startTime ? (Date.now() - startTime) / 1000 : 0;
             startTime = null;
-            people = [];
+            agents = [];
             drawBackground();
             
-            // Update UI
             document.getElementById('timer').textContent = `Recorded: ${elapsed.toFixed(1)}s`;
             document.getElementById('playBtn').disabled = false;
             document.getElementById('stopBtn').disabled = true;
@@ -424,7 +482,6 @@
                         type: 'video/webm'
                     });
                     
-                    // Generate filename with counter
                     recordingCounter[scenario]++;
                     const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
                     const letter = letters[recordingCounter[scenario] - 1] || 'Z';
@@ -432,8 +489,6 @@
                     const filename = `Scenario-${scenarioNum}-${letter}.webm`;
                     
                     const url = URL.createObjectURL(blob);
-                    
-                    // Store for download
                     window.lastRecording = { url, filename };
                     document.getElementById('downloadBtn').disabled = false;
                     
@@ -448,6 +503,7 @@
             }
         }
 
+        // Event listeners
         document.getElementById('playBtn').addEventListener('click', () => {
             const scenario = document.getElementById('scenarioSelect').value;
             startAnimation(scenario);
@@ -463,7 +519,6 @@
                 a.click();
                 document.body.removeChild(a);
                 
-                // Show user feedback
                 const btn = document.getElementById('downloadBtn');
                 const originalText = btn.textContent;
                 btn.textContent = '✅ Downloaded!';

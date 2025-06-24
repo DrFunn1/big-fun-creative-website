@@ -1,550 +1,92 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ghost Tunnel Test Video Generator</title>
-    <style>
-        body {
-            margin: 0;
-            padding: 20px;
-            background: #1a1a1a;
-            color: white;
-            font-family: Arial, sans-serif;
-        }
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
-        }
-        .controls {
-            margin-bottom: 20px;
-            padding: 20px;
-            background: #2a2a2a;
-            border-radius: 8px;
-            display: flex;
-            gap: 15px;
-            align-items: center;
-            flex-wrap: wrap;
-        }
-        button {
-            padding: 10px 20px;
-            background: #4CAF50;
-            color: white;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 16px;
-        }
-        button:hover {
-            background: #45a049;
-        }
-        button:disabled {
-            background: #666;
-            cursor: not-allowed;
-        }
-        button:disabled:hover {
-            background: #666;
-        }
-        canvas {
-            border: 2px solid #444;
-            border-radius: 8px;
-            background: #000;
-            display: block;
-            margin: 0 auto;
-        }
-        .info {
-            margin-top: 20px;
-            padding: 15px;
-            background: #2a2a2a;
-            border-radius: 8px;
-            text-align: center;
-        }
-        .camera-overlay {
-            position: absolute;
-            border: 2px dashed #00ff00;
-            background: rgba(0, 255, 0, 0.1);
-            pointer-events: none;
-        }
-        .canvas-container {
-            position: relative;
-            display: inline-block;
-        }
-        .scenario-select {
-            padding: 8px;
-            background: #333;
-            color: white;
-            border: 1px solid #555;
-            border-radius: 4px;
-        }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ghost Tunnel Corridor Simulation</title>
+  <style>
+    body { margin: 0; overflow: hidden; font-family: sans-serif; }
+    #simCanvas { display: block; background: #111; }
+  </style>
+  <!-- dat.GUI CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/dat.gui@0.7.9/build/dat.gui.min.js"></script>
 </head>
 <body>
-    <div class="container">
-        <h1>🎥 Ghost Tunnel Test Video Generator</h1>
-        <p>Generates top-down hallway footage for OpenCV blob analysis testing</p>
-        
-        <div class="controls">
-            <select class="scenario-select" id="scenarioSelect">
-                <option value="scenario1">Scenario 1: Light Traffic (8 people)</option>
-                <option value="scenario2">Scenario 2: Moderate Traffic (12 people)</option>
-                <option value="scenario3">Scenario 3: Heavy Traffic (16 people)</option>
-                <option value="scenario4">Scenario 4: Congestion Test (20 people)</option>
-            </select>
-            <button id="playBtn">▶ Play & Record</button>
-            <button id="stopBtn" disabled>⏹ Stop</button>
-            <button id="downloadBtn" disabled>📥 Download Video</button>
-            <span id="timer">Ready</span>
-        </div>
+  <canvas id="simCanvas"></canvas>
+  <script type="module">
+    // ----- Parameters and Setup -----
+    const L = 12, W = 3.3, D = 0.3;
+    const params = {
+      scenario: 'Medium',
+      densityOptions: { 'Low': 8, 'Medium': 16, 'High': 24, 'Extreme': 32 },
+      greetProb: 0.1,
+      slipProb: 0.9,
+      start: () => startSim(),
+      reset: () => initSim()
+    };
 
-        <div class="canvas-container">
-            <canvas id="hallwayCanvas" width="1200" height="330"></canvas>
-            <div class="camera-overlay" style="left: 0px; top: 15px; width: 600px; height: 300px;"></div>
-            <div class="camera-overlay" style="left: 600px; top: 15px; width: 600px; height: 300px;"></div>
-        </div>
+    // Canvas sizing
+    const canvas = document.getElementById('simCanvas');
+    const ctx = canvas.getContext('2d');
+    function resize() {
+      canvas.width  = window.innerWidth;
+      canvas.height = window.innerHeight;
+    }
+    window.addEventListener('resize', resize);
+    resize();
 
-        <div class="info">
-            <p><strong>Hallway Dimensions:</strong> 12m × 3.3m with Poisson disk spacing</p>
-            <p><strong>Camera Coverage:</strong> Full width coverage in two 6m×3m zones</p>
-            <p><strong>Algorithm:</strong> Hard separation constraint (≥30px) + spatial hashing</p>
-            <p><strong>People:</strong> White = walking, Blue = greeting, Green = avoiding</p>
-        </div>
-    </div>
+    // ----- dat.GUI Controls -----
+    const gui = new dat.GUI();
+    gui.add(params, 'scenario', Object.keys(params.densityOptions)).name('Density');
+    gui.add(params, 'greetProb', 0, 1, 0.01).name('Greet Prob');
+    gui.add(params, 'slipProb', 0, 1, 0.01).name('Slip Prob');
+    gui.add(params, 'start').name('Start');
+    gui.add(params, 'reset').name('Reset');
 
-    <script>
-        console.log("Poisson disk simulation starting...");
+    // ----- Simulation State -----
+    let agents = [];
+    let running = false;
+    const dt = 0.016;
 
-        const canvas = document.getElementById('hallwayCanvas');
-        const ctx = canvas.getContext('2d');
-        
-        // Simulation parameters (10px = 1m scale)
-        const CORRIDOR_LENGTH = 1200; // 12m
-        const CORRIDOR_WIDTH = 330;   // 3.3m  
-        const DOT_DIAMETER = 30;      // 3m person width
-        const DOT_RADIUS = 15;
-        const SPEED = 1.0;            // pixels per frame
-        const DETECTION_RADIUS = 60;  // 2 * DOT_DIAMETER
-        const GREETING_RADIUS = 33;   // 1.1 * DOT_DIAMETER
-        const GREETING_PROB = 0.1;    // 10% chance
-        const GREETING_DURATION = 120; // 2 seconds at 60fps
-        const AVOIDANCE_WEIGHT = 0.5;
-        
-        let agents = [];
-        let animationId = null;
-        let startTime = null;
-        let mediaRecorder = null;
-        let recordedChunks = [];
-        let recordingCounter = { scenario1: 0, scenario2: 0, scenario3: 0, scenario4: 0 };
-        let spatialGrid = {};
+    // Dummy implementation placeholders:
+    import { generateAgents, stepSimulation } from './simulation.js';
+    function drawAgents() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      agents.forEach(a => {
+        const x = (a.x / L) * canvas.width;
+        const y = (a.y / W) * canvas.height;
+        ctx.beginPath();
+        ctx.arc(x, y, (D/2 / L) * canvas.width, 0, Math.PI*2);
+        ctx.fillStyle = '#0f0';
+        ctx.fill();
+      });
+    }
 
-        class Agent {
-            constructor(x, y, direction, speed = SPEED) {
-                this.x = x;
-                this.y = y;
-                this.direction = direction; // +1 for right, -1 for left
-                this.speed = speed;
-                this.vx = direction * speed;
-                this.vy = 0;
-                this.state = 'walking'; // 'walking', 'greeting', 'avoiding'
-                this.greetingTimer = 0;
-                this.active = true;
-            }
+    function initSim() {
+      const N = params.densityOptions[params.scenario];
+      agents = generateAgents({ N, L, W, D, pGreet: params.greetProb, slipProb: params.slipProb });
+      running = false;
+      drawAgents();
+    }
 
-            update() {
-                if (!this.active) return;
+    function startSim() {
+      if (!running) {
+        running = true;
+        requestAnimationFrame(loop);
+      }
+    }
 
-                // Handle greeting state
-                if (this.state === 'greeting') {
-                    this.greetingTimer--;
-                    if (this.greetingTimer <= 0) {
-                        this.state = 'walking';
-                        this.vx = this.direction * this.speed;
-                        this.vy = 0;
-                    } else {
-                        this.vx = 0;
-                        this.vy = 0;
-                        return;
-                    }
-                }
+    function loop() {
+      if (!running) return;
+      // update parameter changes
+      agents.forEach(a => { a.pGreet = params.greetProb; a.slipProb = params.slipProb; });
+      stepSimulation(agents, { dt, L, W, D });
+      drawAgents();
+      requestAnimationFrame(loop);
+    }
 
-                // Collision avoidance
-                const neighbors = this.getNeighbors();
-                let avoidanceX = 0;
-                let avoidanceY = 0;
-
-                for (let neighbor of neighbors) {
-                    if (neighbor === this) continue;
-
-                    // Predict future positions
-                    const futureX = this.x + this.vx;
-                    const futureY = this.y + this.vy;
-                    const neighborFutureX = neighbor.x + neighbor.vx;
-                    const neighborFutureY = neighbor.y + neighbor.vy;
-
-                    const dx = futureX - neighborFutureX;
-                    const dy = futureY - neighborFutureY;
-                    const distance = Math.sqrt(dx * dx + dy * dy);
-
-                    // Check for potential collision
-                    if (distance < DOT_DIAMETER) {
-                        // Calculate avoidance force (always to the right of movement direction)
-                        const avoidanceStrength = (DOT_DIAMETER - distance) / DOT_DIAMETER;
-                        const perpX = -this.vy; // Perpendicular to velocity (right direction)
-                        const perpY = this.vx;
-                        const perpLength = Math.sqrt(perpX * perpX + perpY * perpY);
-                        
-                        if (perpLength > 0) {
-                            avoidanceX += (perpX / perpLength) * this.speed * avoidanceStrength;
-                            avoidanceY += (perpY / perpLength) * this.speed * avoidanceStrength;
-                        }
-
-                        this.state = 'avoiding';
-                    }
-
-                    // Check for greeting opportunity
-                    if (distance < GREETING_RADIUS && 
-                        this.state === 'walking' && 
-                        neighbor.state === 'walking' &&
-                        Math.random() < GREETING_PROB / 60) { // Per-frame probability
-                        
-                        this.state = 'greeting';
-                        this.greetingTimer = GREETING_DURATION;
-                        neighbor.state = 'greeting';
-                        neighbor.greetingTimer = GREETING_DURATION;
-                        return;
-                    }
-                }
-
-                // Update velocity with avoidance
-                const desiredVx = this.direction * this.speed;
-                const desiredVy = 0;
-                
-                this.vx = desiredVx + AVOIDANCE_WEIGHT * avoidanceX;
-                this.vy = desiredVy + AVOIDANCE_WEIGHT * avoidanceY;
-
-                // Normalize velocity to maintain speed
-                const currentSpeed = Math.sqrt(this.vx * this.vx + this.vy * this.vy);
-                if (currentSpeed > 0) {
-                    this.vx = (this.vx / currentSpeed) * this.speed;
-                    this.vy = (this.vy / currentSpeed) * this.speed;
-                }
-
-                // Update position
-                this.x += this.vx;
-                this.y += this.vy;
-
-                // Constrain to corridor boundaries
-                this.y = Math.max(DOT_RADIUS + 15, Math.min(CORRIDOR_WIDTH - DOT_RADIUS - 15, this.y));
-
-                // Remove agent if they exit the corridor
-                if ((this.direction > 0 && this.x > CORRIDOR_LENGTH + DOT_RADIUS) ||
-                    (this.direction < 0 && this.x < -DOT_RADIUS)) {
-                    this.active = false;
-                }
-
-                // Reset state if no longer avoiding
-                if (this.state === 'avoiding') {
-                    this.state = 'walking';
-                }
-            }
-
-            getNeighbors() {
-                const cellSize = DOT_DIAMETER;
-                const cellX = Math.floor(this.x / cellSize);
-                const cellY = Math.floor(this.y / cellSize);
-                const neighbors = [];
-
-                // Check 3x3 grid around current cell
-                for (let dx = -1; dx <= 1; dx++) {
-                    for (let dy = -1; dy <= 1; dy++) {
-                        const key = `${cellX + dx},${cellY + dy}`;
-                        if (spatialGrid[key]) {
-                            for (let agent of spatialGrid[key]) {
-                                const distance = Math.sqrt(
-                                    (this.x - agent.x) ** 2 + (this.y - agent.y) ** 2
-                                );
-                                if (distance < DETECTION_RADIUS) {
-                                    neighbors.push(agent);
-                                }
-                            }
-                        }
-                    }
-                }
-                return neighbors;
-            }
-
-            draw() {
-                if (!this.active) return;
-
-                // Color based on state
-                switch (this.state) {
-                    case 'greeting':
-                        ctx.fillStyle = '#4488ff'; // Blue
-                        break;
-                    case 'avoiding':
-                        ctx.fillStyle = '#44ff88'; // Green
-                        break;
-                    default:
-                        ctx.fillStyle = 'white';
-                }
-
-                ctx.beginPath();
-                ctx.arc(this.x, this.y, DOT_RADIUS, 0, Math.PI * 2);
-                ctx.fill();
-            }
-        }
-
-        function poissonDiskSampling1D(min, max, minDistance, count) {
-            const positions = [];
-            const attempts = 1000;
-            
-            while (positions.length < count && attempts > 0) {
-                const candidate = min + Math.random() * (max - min);
-                let valid = true;
-                
-                for (let pos of positions) {
-                    if (Math.abs(candidate - pos) < minDistance) {
-                        valid = false;
-                        break;
-                    }
-                }
-                
-                if (valid) {
-                    positions.push(candidate);
-                }
-            }
-            
-            return positions;
-        }
-
-        function updateSpatialGrid() {
-            spatialGrid = {};
-            const cellSize = DOT_DIAMETER;
-            
-            for (let agent of agents) {
-                if (!agent.active) continue;
-                
-                const cellX = Math.floor(agent.x / cellSize);
-                const cellY = Math.floor(agent.y / cellSize);
-                const key = `${cellX},${cellY}`;
-                
-                if (!spatialGrid[key]) {
-                    spatialGrid[key] = [];
-                }
-                spatialGrid[key].push(agent);
-            }
-        }
-
-        function initScenario(agentCount) {
-            console.log(`Initializing scenario with ${agentCount} agents`);
-            agents = [];
-            
-            const agentsPerDirection = Math.floor(agentCount / 2);
-            const yMin = DOT_RADIUS + 15;
-            const yMax = CORRIDOR_WIDTH - DOT_RADIUS - 15;
-            
-            // Generate Poisson disk positions for each direction
-            const leftToRightPositions = poissonDiskSampling1D(yMin, yMax, DOT_DIAMETER, agentsPerDirection);
-            const rightToLeftPositions = poissonDiskSampling1D(yMin, yMax, DOT_DIAMETER, agentsPerDirection);
-            
-            // Create left-to-right agents
-            for (let y of leftToRightPositions) {
-                agents.push(new Agent(DOT_RADIUS, y, 1));
-            }
-            
-            // Create right-to-left agents  
-            for (let y of rightToLeftPositions) {
-                agents.push(new Agent(CORRIDOR_LENGTH - DOT_RADIUS, y, -1));
-            }
-            
-            console.log(`Created ${agents.length} agents`);
-        }
-
-        function drawBackground() {
-            ctx.fillStyle = '#000000';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-            // Draw camera view boundaries (15px barriers top/bottom)
-            ctx.fillStyle = '#333333';
-            ctx.fillRect(0, 0, CORRIDOR_LENGTH, 15); // Top barrier
-            ctx.fillRect(0, 315, CORRIDOR_LENGTH, 15); // Bottom barrier
-
-            ctx.strokeStyle = '#666';
-            ctx.lineWidth = 1;
-            ctx.setLineDash([5, 5]);
-            
-            // Center line
-            ctx.beginPath();
-            ctx.moveTo(0, CORRIDOR_WIDTH / 2);
-            ctx.lineTo(CORRIDOR_LENGTH, CORRIDOR_WIDTH / 2);
-            ctx.stroke();
-
-            // Camera boundaries
-            ctx.strokeStyle = '#004400';
-            ctx.setLineDash([]);
-            ctx.strokeRect(0, 15, 600, 300);
-            ctx.strokeRect(600, 15, 600, 300);
-
-            ctx.fillStyle = '#00ff00';
-            ctx.font = '12px Arial';
-            ctx.fillText('Camera 1', 10, 35);
-            ctx.fillText('Camera 2', 610, 35);
-        }
-
-        function animate() {
-            try {
-                drawBackground();
-                
-                updateSpatialGrid();
-                
-                // Update all agents
-                for (let agent of agents) {
-                    agent.update();
-                }
-                
-                // Draw all agents
-                for (let agent of agents) {
-                    agent.draw();
-                }
-                
-                // Remove inactive agents
-                agents = agents.filter(agent => agent.active);
-
-                if (startTime) {
-                    const elapsed = (Date.now() - startTime) / 1000;
-                    document.getElementById('timer').textContent = `Recording: ${elapsed.toFixed(1)}s`;
-                }
-
-                animationId = requestAnimationFrame(animate);
-            } catch (error) {
-                console.error("Animation error:", error);
-            }
-        }
-
-        function startAnimation(scenario) {
-            console.log("Starting animation and recording:", scenario);
-            stopAnimation();
-            
-            const agentCounts = {
-                scenario1: 8,
-                scenario2: 12,
-                scenario3: 16,
-                scenario4: 20
-            };
-            
-            initScenario(agentCounts[scenario] || 8);
-            
-            startTime = Date.now();
-            startRecording(scenario);
-            animate();
-            
-            document.getElementById('playBtn').disabled = true;
-            document.getElementById('stopBtn').disabled = false;
-            document.getElementById('downloadBtn').disabled = true;
-        }
-
-        function stopAnimation() {
-            console.log("Stopping animation and recording");
-            if (animationId) {
-                cancelAnimationFrame(animationId);
-                animationId = null;
-            }
-            
-            if (mediaRecorder && mediaRecorder.state === 'recording') {
-                mediaRecorder.stop();
-            }
-            
-            const elapsed = startTime ? (Date.now() - startTime) / 1000 : 0;
-            startTime = null;
-            agents = [];
-            drawBackground();
-            
-            document.getElementById('timer').textContent = `Recorded: ${elapsed.toFixed(1)}s`;
-            document.getElementById('playBtn').disabled = false;
-            document.getElementById('stopBtn').disabled = true;
-        }
-
-        function startRecording(scenario) {
-            try {
-                const stream = canvas.captureStream(30);
-                mediaRecorder = new MediaRecorder(stream, {
-                    mimeType: 'video/webm;codecs=vp9'
-                });
-
-                recordedChunks = [];
-                mediaRecorder.ondataavailable = (event) => {
-                    if (event.data.size > 0) {
-                        recordedChunks.push(event.data);
-                    }
-                };
-
-                mediaRecorder.onstop = () => {
-                    const blob = new Blob(recordedChunks, {
-                        type: 'video/webm'
-                    });
-                    
-                    recordingCounter[scenario]++;
-                    const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-                    const letter = letters[recordingCounter[scenario] - 1] || 'Z';
-                    const scenarioNum = scenario.replace('scenario', '');
-                    const filename = `Scenario-${scenarioNum}-${letter}.webm`;
-                    
-                    const url = URL.createObjectURL(blob);
-                    window.lastRecording = { url, filename };
-                    document.getElementById('downloadBtn').disabled = false;
-                    
-                    console.log(`Recording saved as: ${filename}`);
-                };
-
-                mediaRecorder.start();
-                console.log("Recording started");
-            } catch (error) {
-                console.error("Recording error:", error);
-                alert("Recording not supported in this browser");
-            }
-        }
-
-        // Event listeners
-        document.getElementById('playBtn').addEventListener('click', () => {
-            const scenario = document.getElementById('scenarioSelect').value;
-            startAnimation(scenario);
-        });
-
-        document.getElementById('downloadBtn').addEventListener('click', () => {
-            if (window.lastRecording) {
-                const a = document.createElement('a');
-                a.href = window.lastRecording.url;
-                a.download = window.lastRecording.filename;
-                a.style.display = 'none';
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                
-                const btn = document.getElementById('downloadBtn');
-                const originalText = btn.textContent;
-                btn.textContent = '✅ Downloaded!';
-                setTimeout(() => {
-                    btn.textContent = originalText;
-                }, 2000);
-                
-                URL.revokeObjectURL(window.lastRecording.url);
-                console.log(`Downloaded: ${window.lastRecording.filename}`);
-            }
-        });
-
-        document.getElementById('stopBtn').addEventListener('click', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            console.log("Stop button clicked");
-            stopAnimation();
-        });
-
-        document.getElementById('scenarioSelect').addEventListener('change', () => {
-            document.getElementById('timer').textContent = 'Ready';
-            document.getElementById('downloadBtn').disabled = true;
-        });
-
-        drawBackground();
-        console.log("Setup complete");
-    </script>
+    // Initialize on load
+    initSim();
+  </script>
 </body>
 </html>

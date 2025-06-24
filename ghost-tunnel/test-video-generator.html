@@ -7,14 +7,15 @@
   <style>
     body { margin: 0; overflow: hidden; font-family: sans-serif; }
     #simCanvas { display: block; background: #111; }
+    .dg { z-index: 10 !important; }
   </style>
   <!-- dat.GUI CDN -->
   <script src="https://cdn.jsdelivr.net/npm/dat.gui@0.7.9/build/dat.gui.min.js"></script>
 </head>
 <body>
   <canvas id="simCanvas"></canvas>
-  <script type="module">
-    // ----- Parameters and Setup -----
+  <script>
+    // ---- Parameters ----
     const L = 12, W = 3.3, D = 0.3;
     const params = {
       scenario: 'Medium',
@@ -24,18 +25,20 @@
       start: () => startSim(),
       reset: () => initSim()
     };
+    const dt = 0.016;
+    let agents = [], running = false;
 
-    // Canvas sizing
+    // ---- Canvas Setup ----
     const canvas = document.getElementById('simCanvas');
     const ctx = canvas.getContext('2d');
     function resize() {
-      canvas.width  = window.innerWidth;
+      canvas.width = window.innerWidth;
       canvas.height = window.innerHeight;
     }
     window.addEventListener('resize', resize);
     resize();
 
-    // ----- dat.GUI Controls -----
+    // ---- GUI Setup ----
     const gui = new dat.GUI();
     gui.add(params, 'scenario', Object.keys(params.densityOptions)).name('Density');
     gui.add(params, 'greetProb', 0, 1, 0.01).name('Greet Prob');
@@ -43,49 +46,88 @@
     gui.add(params, 'start').name('Start');
     gui.add(params, 'reset').name('Reset');
 
-    // ----- Simulation State -----
-    let agents = [];
-    let running = false;
-    const dt = 0.016;
+    // ---- Simulation Functions ----
+    function generateAgents(N) {
+      const out = [];
+      // 1D Poisson along y: simple even spacing + jitter
+      const spacing = W / N;
+      for (let i = 0; i < N; i++) {
+        const y = Math.min(D/2 + Math.random() * (W - D), spacing * i + spacing/2);
+        const dir = i < N/2 ? 1 : -1; // half go right, half left
+        const x = dir === 1 ? 0 : L;
+        out.push({ x, y, dir, state: 'walking', greetTimer: 0 });
+      }
+      return out;
+    }
 
-    // Dummy implementation placeholders:
-    import { generateAgents, stepSimulation } from './simulation.js';
+    function stepSimulation() {
+      agents.forEach(a => {
+        if (a.state === 'greeting') {
+          a.greetTimer -= dt;
+          if (a.greetTimer <= 0) a.state = 'walking';
+          return;
+        }
+        // Move
+        let vx = a.dir * 1.2;
+        let vy = 0;
+        // Simple neighbor avoidance
+        agents.forEach(b => {
+          if (b === a) return;
+          const dx = (a.x + vx*dt) - (b.x + b.dir*1.2*dt);
+          const dy = a.y - b.y;
+          const dist = Math.hypot(dx, dy);
+          if (dist < D) {
+            // slip right
+            vy += (a.dir) * 0.5;
+          }
+          // greeting chance
+          if (dist < 1.1*D && Math.random() < params.greetProb*dt) {
+            a.state = b.state = 'greeting';
+            a.greetTimer = b.greetTimer = 1.0; // 1s pause
+          }
+        });
+        a.x += vx * dt;
+        a.y = Math.min(W - D/2, Math.max(D/2, a.y + vy*dt));
+        // wrap around ends
+        if (a.x > L) a.x = 0;
+        if (a.x < 0) a.x = L;
+      });
+    }
+
     function drawAgents() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       agents.forEach(a => {
-        const x = (a.x / L) * canvas.width;
-        const y = (a.y / W) * canvas.height;
+        const px = (a.x / L) * canvas.width;
+        const py = (a.y / W) * canvas.height;
+        const pr = (D/2 / L) * canvas.width;
         ctx.beginPath();
-        ctx.arc(x, y, (D/2 / L) * canvas.width, 0, Math.PI*2);
-        ctx.fillStyle = '#0f0';
+        ctx.arc(px, py, pr, 0, Math.PI*2);
+        ctx.fillStyle = a.state === 'greeting' ? '#f00' : '#0f0';
         ctx.fill();
       });
     }
 
+    // ---- Control Flow ----
     function initSim() {
       const N = params.densityOptions[params.scenario];
-      agents = generateAgents({ N, L, W, D, pGreet: params.greetProb, slipProb: params.slipProb });
+      agents = generateAgents(N);
       running = false;
       drawAgents();
     }
-
     function startSim() {
       if (!running) {
         running = true;
-        requestAnimationFrame(loop);
+        loop();
       }
     }
-
     function loop() {
       if (!running) return;
-      // update parameter changes
-      agents.forEach(a => { a.pGreet = params.greetProb; a.slipProb = params.slipProb; });
-      stepSimulation(agents, { dt, L, W, D });
+      stepSimulation();
       drawAgents();
       requestAnimationFrame(loop);
     }
 
-    // Initialize on load
+    // ---- Initialize ----
     initSim();
   </script>
 </body>

@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ghost Tunnel Test Video Generator</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            background: #1a1a1a;
+            color: white;
+            font-family: Arial, sans-serif;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .controls {
+            margin-bottom: 20px;
+            padding: 20px;
+            background: #2a2a2a;
+            border-radius: 8px;
+            display: flex;
+            gap: 15px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        button {
+            padding: 10px 20px;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        button:hover {
+            background: #45a049;
+        }
+        button:disabled {
+            background: #666;
+            cursor: not-allowed;
+        }
+        button:disabled:hover {
+            background: #666;
+        }
+        .recording {
+            background: #f44336;
+        }
+        canvas {
+            border: 2px solid #444;
+            border-radius: 8px;
+            background: #000;
+            display: block;
+            margin: 0 auto;
+        }
+        .info {
+            margin-top: 20px;
+            padding: 15px;
+            background: #2a2a2a;
+            border-radius: 8px;
+            text-align: center;
+        }
+        .camera-overlay {
+            position: absolute;
+            border: 2px dashed #00ff00;
+            background: rgba(0, 255, 0, 0.1);
+            pointer-events: none;
+        }
+        .canvas-container {
+            position: relative;
+            display: inline-block;
+        }
+        .scenario-select {
+            padding: 8px;
+            background: #333;
+            color: white;
+            border: 1px solid #555;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎥 Ghost Tunnel Test Video Generator</h1>
+        <p>Generates top-down hallway footage for OpenCV blob analysis testing</p>
+        
+        <div class="controls">
+            <select class="scenario-select" id="scenarioSelect">
+                <option value="scenario1">Scenario 1: Beeline + Wanderers + Meeting</option>
+                <option value="scenario2">Scenario 2: Multiple Groups</option>
+                <option value="scenario3">Scenario 3: Congestion Test</option>
+            </select>
+            <button id="playBtn">▶ Play & Record</button>
+            <button id="stopBtn" disabled>⏹ Stop</button>
+            <button id="downloadBtn" disabled>📥 Download Video</button>
+            <span id="timer">Ready</span>
+        </div>
+
+        <div class="canvas-container">
+            <canvas id="hallwayCanvas" width="1200" height="300"></canvas>
+            <div class="camera-overlay" style="left: 0px; top: 0px; width: 600px; height: 300px;"></div>
+            <div class="camera-overlay" style="left: 600px; top: 0px; width: 600px; height: 300px;"></div>
+        </div>
+
+        <div class="info">
+            <p><strong>Hallway Dimensions:</strong> 12m × 3m with 30cm camera view barriers</p>
+            <p><strong>Camera Coverage:</strong> Full width coverage in two 6m×2.4m zones</p>
+            <p><strong>Output:</strong> WebM video optimized for OpenCV blob detection</p>
+            <p><strong>People:</strong> Represented as white circles (easy blob detection)</p>
+        </div>
+    </div>
+
+    <script>
+        console.log("Script starting...");
+
+        const canvas = document.getElementById('hallwayCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        let people = [];
+        let animationId = null;
+        let startTime = null;
+        let mediaRecorder = null;
+        let recordedChunks = [];
+        let recordingCounter = { scenario1: 0, scenario2: 0, scenario3: 0 };
+
+        function constrainToBoundaries(person) {
+            // Keep people within camera view boundaries (30px barriers top/bottom)
+            if (person.y < 30) person.y = 30;
+            if (person.y > 270) person.y = 270;
+            
+            // Keep within hallway length
+            if (person.x < 15) person.x = 15;
+            if (person.x > 1185) person.x = 1185;
+        }
+
+        function createPerson(x, y, targetX, targetY, speed) {
+            return {
+                x: x,
+                y: y,
+                targetX: targetX,
+                targetY: targetY,
+                speed: speed || 1,
+                radius: 15,
+                active: true,
+                interactionTimer: 0,
+                avoidanceTimer: 0,
+                avoidanceAngle: 0
+            };
+        }
+
+        function updatePerson(person, allPeople) {
+            if (!person.active) return;
+
+            const dx = person.targetX - person.x;
+            const dy = person.targetY - person.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+
+            if (distance > 5) {
+                // Calculate desired direction
+                let moveX = (dx / distance) * person.speed;
+                let moveY = (dy / distance) * person.speed;
+                
+                // Check for collisions with other people (1.5x radius = 22.5 pixels)
+                let blocked = false;
+                for (let other of allPeople) {
+                    if (other === person || !other.active) continue;
+                    
+                    const distToOther = Math.sqrt(
+                        (person.x - other.x) ** 2 + (person.y - other.y) ** 2
+                    );
+                    
+                    if (distToOther < 45) { // 1.5 * radius * 2 = collision detection
+                        blocked = true;
+                        person.interactionTimer++;
+                        
+                        // After 5 seconds (300 frames at 60fps), start avoidance
+                        if (person.interactionTimer > 300) {
+                            person.avoidanceTimer = 120; // 2 second avoidance maneuver
+                            person.avoidanceAngle = Math.random() > 0.5 ? 1 : -1; // Random side
+                            person.interactionTimer = 0;
+                        }
+                        break;
+                    }
+                }
+                
+                if (!blocked) {
+                    person.interactionTimer = 0;
+                }
+                
+                // Handle avoidance maneuver
+                if (person.avoidanceTimer > 0) {
+                    const avoidanceProgress = (120 - person.avoidanceTimer) / 120;
+                    let avoidanceMagnitude;
+                    
+                    // Ramp up first half, ramp down second half
+                    if (avoidanceProgress < 0.5) {
+                        avoidanceMagnitude = avoidanceProgress * 2; // 0 to 1
+                    } else {
+                        avoidanceMagnitude = 2 - (avoidanceProgress * 2); // 1 to 0
+                    }
+                    
+                    // Apply lateral motion (1.5 dot radius = 22.5 pixels max)
+                    const lateralForce = avoidanceMagnitude * 22.5 * person.avoidanceAngle;
+                    
+                    // Perpendicular to movement direction
+                    const perpX = -moveY; // Rotate 90 degrees
+                    const perpY = moveX;
+                    const perpLength = Math.sqrt(perpX * perpX + perpY * perpY);
+                    
+                    if (perpLength > 0) {
+                        moveX += (perpX / perpLength) * lateralForce * 0.1;
+                        moveY += (perpY / perpLength) * lateralForce * 0.1;
+                    }
+                    
+                    person.avoidanceTimer--;
+                    blocked = false; // Override blocking during avoidance
+                }
+                
+                // Move if not blocked
+                if (!blocked) {
+                    person.x += moveX;
+                    person.y += moveY;
+                    constrainToBoundaries(person);
+                }
+            } else {
+                person.active = false;
+            }
+        }
+
+        function drawPerson(person) {
+            if (!person.active) return;
+
+            // Color based on state
+            if (person.interactionTimer > 0) {
+                ctx.fillStyle = '#ffff99'; // Light yellow during interaction
+            } else if (person.avoidanceTimer > 0) {
+                ctx.fillStyle = '#99ff99'; // Light green during avoidance
+            } else {
+                ctx.fillStyle = 'white';
+            }
+            
+            ctx.beginPath();
+            ctx.arc(person.x, person.y, person.radius, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Show collision detection area during interactions
+            if (person.interactionTimer > 0) {
+                ctx.strokeStyle = 'rgba(255, 255, 0, 0.3)';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.arc(person.x, person.y, 22.5, 0, Math.PI * 2);
+                ctx.stroke();
+            }
+        }
+
+        function drawBackground() {
+            ctx.fillStyle = '#000000';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Draw camera view boundaries (30px barriers top/bottom)
+            ctx.fillStyle = '#333333';
+            ctx.fillRect(0, 0, 1200, 30); // Top barrier
+            ctx.fillRect(0, 270, 1200, 30); // Bottom barrier
+
+            ctx.strokeStyle = '#666';
+            ctx.lineWidth = 1;
+            ctx.setLineDash([5, 5]);
+            
+            // Center line
+            ctx.beginPath();
+            ctx.moveTo(0, 150);
+            ctx.lineTo(1200, 150);
+            ctx.stroke();
+
+            // Camera boundaries - now cover full width
+            ctx.strokeStyle = '#004400';
+            ctx.setLineDash([]);
+            ctx.strokeRect(0, 30, 600, 240);
+            ctx.strokeRect(600, 30, 600, 240);
+
+            // Add camera labels
+            ctx.fillStyle = '#00ff00';
+            ctx.font = '12px Arial';
+            ctx.fillText('Camera 1', 10, 50);
+            ctx.fillText('Camera 2', 610, 50);
+            
+            // Barrier labels
+            ctx.fillStyle = '#999999';
+            ctx.font = '10px Arial';
+            ctx.fillText('Camera View Boundary', 500, 20);
+            ctx.fillText('Camera View Boundary', 500, 290);
+        }
+
+        function initScenario1() {
+            console.log("Initializing scenario 1");
+            people = [
+                createPerson(50, 150, 1150, 150, 2),
+                createPerson(1150, 100, 50, 140, 0.8),
+                createPerson(1150, 200, 50, 160, 0.8),
+                createPerson(50, 80, 1150, 110, 1.2),
+                createPerson(50, 220, 1150, 190, 1.2)
+            ];
+            // Ensure all people start within boundaries
+            people.forEach(constrainToBoundaries);
+        }
+
+        function initScenario2() {
+            console.log("Initializing scenario 2");
+            people = [
+                createPerson(50, 75, 1150, 75, 1.5),
+                createPerson(70, 95, 1150, 95, 1.4),
+                createPerson(1150, 150, 50, 150, 1.1),
+                createPerson(1130, 170, 50, 170, 1.0),
+                createPerson(1110, 190, 50, 190, 1.2),
+                createPerson(600, 50, 600, 250, 0.7)
+            ];
+            // Ensure all people start within boundaries
+            people.forEach(constrainToBoundaries);
+        }
+
+        function initScenario3() {
+            console.log("Initializing scenario 3");
+            people = [];
+            for (let i = 0; i < 8; i++) {
+                const startSide = Math.random() > 0.5;
+                const startX = startSide ? 50 : 1150;
+                const endX = startSide ? 1150 : 50;
+                const y = 80 + (i * 20);
+                
+                people.push(createPerson(startX, y, endX, y + (Math.random() - 0.5) * 40, 0.5 + Math.random() * 1));
+            }
+            // Ensure all people start within boundaries
+            people.forEach(constrainToBoundaries);
+        }
+
+        function animate() {
+            try {
+                drawBackground();
+                
+                people.forEach(person => {
+                    updatePerson(person, people);
+                    drawPerson(person);
+                });
+
+                if (startTime) {
+                    const elapsed = (Date.now() - startTime) / 1000;
+                    document.getElementById('timer').textContent = `Recording: ${elapsed.toFixed(1)}s`;
+                }
+
+                animationId = requestAnimationFrame(animate);
+            } catch (error) {
+                console.error("Animation error:", error);
+            }
+        }
+
+        function startAnimation(scenario) {
+            console.log("Starting animation and recording:", scenario);
+            stopAnimation();
+            
+            switch(scenario) {
+                case 'scenario1':
+                    initScenario1();
+                    break;
+                case 'scenario2':
+                    initScenario2();
+                    break;
+                case 'scenario3':
+                    initScenario3();
+                    break;
+                default:
+                    initScenario1();
+            }
+
+            startTime = Date.now();
+            startRecording(scenario);
+            animate();
+            
+            // Update UI
+            document.getElementById('playBtn').disabled = true;
+            document.getElementById('stopBtn').disabled = false;
+            document.getElementById('downloadBtn').disabled = true;
+        }
+
+        function stopAnimation() {
+            console.log("Stopping animation and recording");
+            if (animationId) {
+                cancelAnimationFrame(animationId);
+                animationId = null;
+            }
+            
+            if (mediaRecorder && mediaRecorder.state === 'recording') {
+                mediaRecorder.stop();
+            }
+            
+            const elapsed = startTime ? (Date.now() - startTime) / 1000 : 0;
+            startTime = null;
+            people = [];
+            drawBackground();
+            
+            // Update UI
+            document.getElementById('timer').textContent = `Recorded: ${elapsed.toFixed(1)}s`;
+            document.getElementById('playBtn').disabled = false;
+            document.getElementById('stopBtn').disabled = true;
+        }
+
+        function startRecording(scenario) {
+            try {
+                const stream = canvas.captureStream(30);
+                mediaRecorder = new MediaRecorder(stream, {
+                    mimeType: 'video/webm;codecs=vp9'
+                });
+
+                recordedChunks = [];
+                mediaRecorder.ondataavailable = (event) => {
+                    if (event.data.size > 0) {
+                        recordedChunks.push(event.data);
+                    }
+                };
+
+                mediaRecorder.onstop = () => {
+                    const blob = new Blob(recordedChunks, {
+                        type: 'video/webm'
+                    });
+                    
+                    // Generate filename with counter
+                    recordingCounter[scenario]++;
+                    const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+                    const letter = letters[recordingCounter[scenario] - 1] || 'Z';
+                    const scenarioNum = scenario.replace('scenario', '');
+                    const filename = `Scenario-${scenarioNum}-${letter}.webm`;
+                    
+                    const url = URL.createObjectURL(blob);
+                    
+                    // Store for download
+                    window.lastRecording = { url, filename };
+                    document.getElementById('downloadBtn').disabled = false;
+                    
+                    console.log(`Recording saved as: ${filename}`);
+                };
+
+                mediaRecorder.start();
+                console.log("Recording started");
+            } catch (error) {
+                console.error("Recording error:", error);
+                alert("Recording not supported in this browser");
+            }
+        }
+
+        document.getElementById('playBtn').addEventListener('click', () => {
+            const scenario = document.getElementById('scenarioSelect').value;
+            startAnimation(scenario);
+        });
+
+        document.getElementById('downloadBtn').addEventListener('click', () => {
+            if (window.lastRecording) {
+                const a = document.createElement('a');
+                a.href = window.lastRecording.url;
+                a.download = window.lastRecording.filename;
+                a.style.display = 'none';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                
+                // Show user feedback
+                const btn = document.getElementById('downloadBtn');
+                const originalText = btn.textContent;
+                btn.textContent = '✅ Downloaded!';
+                setTimeout(() => {
+                    btn.textContent = originalText;
+                }, 2000);
+                
+                URL.revokeObjectURL(window.lastRecording.url);
+                console.log(`Downloaded: ${window.lastRecording.filename}`);
+            }
+        });
+
+        document.getElementById('stopBtn').addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            console.log("Stop button clicked");
+            stopAnimation();
+        });
+
+        document.getElementById('scenarioSelect').addEventListener('change', () => {
+            document.getElementById('timer').textContent = 'Ready';
+            document.getElementById('downloadBtn').disabled = true;
+        });
+
+        drawBackground();
+        console.log("Setup complete");
+    </script>
+</body>
+</html>

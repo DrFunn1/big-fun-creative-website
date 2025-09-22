@@ -24,7 +24,36 @@ header, footer {
   width: 100%;
   border-radius: 10px;
 }
+.home-headline {
+  text-align: center;
+  font-size: clamp(1.5rem, 3vw, 2.5rem);
+  line-height: 1.4;
+  margin-top: 1rem;
+  margin-bottom: 1rem;
+}
+
 footer {
+  text-align: center;
+  padding: 1rem;
   margin-top: 3rem;
   font-size: 0.9rem;
+}
+
+/* Targets the list specifically within the footer */
+footer ul {
+  list-style-type: none; /* Removes the bullet points */
+  padding-left: 0;       /* Removes default browser indentation */
+}
+
+/* Styles each list item in the footer's list */
+footer li {
+  margin-bottom: 0.5rem; /* Adds a little space between list items */
+}
+
+/* Styles the favicon images inside the footer links */
+footer .favicon {
+  width: 16px;
+  height: 16px;
+  vertical-align: middle; /* Aligns the icon nicely with the text */
+  margin-right: 8px;      /* Adds space between the icon and the text */
 }

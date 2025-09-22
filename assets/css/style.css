@@ -25,15 +25,28 @@ header, footer {
   border-radius: 10px;
 }
 }
-footer ul {
-  list-style-type: none;
-  padding-left: 0; /* Also a good idea to remove the default list indentation */
-  display: grid; /* Optional: This will display your logos side-by-side */
-  justify-content: center; /* Optional: This centers the logos */
-  gap: 20rem; /* Optional: This adds space between the logos */
+footer {
+  text-align: center;
+  padding: 1rem;
+  margin-top: 3rem;
+  font-size: 0.9rem;
 }
 
-/* Optional: Style for the items within the footer list */
+/* Targets the list specifically within the footer */
+footer ul {
+  list-style-type: none; /* Removes the bullet points */
+  padding-left: 0;       /* Removes default browser indentation */
+}
+
+/* Styles each list item in the footer's list */
 footer li {
-  display: inline-block; /* Helps with alignment */
+  margin-bottom: 0.5rem; /* Adds a little space between list items */
+}
+
+/* Styles the favicon images inside the footer links */
+footer .favicon {
+  width: 16px;
+  height: 16px;
+  vertical-align: middle; /* Aligns the icon nicely with the text */
+  margin-right: 8px;      /* Adds space between the icon and the text */
 }

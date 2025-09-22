@@ -24,7 +24,16 @@ header, footer {
   width: 100%;
   border-radius: 10px;
 }
-footer {
-  margin-top: 3rem;
-  font-size: 0.9rem;
+}
+footer ul {
+  list-style-type: none;
+  padding-left: 0; /* Also a good idea to remove the default list indentation */
+  display: flex; /* Optional: This will display your logos side-by-side */
+  justify-content: center; /* Optional: This centers the logos */
+  gap: 2rem; /* Optional: This adds space between the logos */
+}
+
+/* Optional: Style for the items within the footer list */
+footer li {
+  display: inline-block; /* Helps with alignment */
 }

@@ -1,79 +1,127 @@
- 
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Big Fun Creative</title>
+  <title>Big Fun Creative - Interactive Art Installations</title>
   <link rel="stylesheet" href="assets/css/style.css">
   <link rel="icon" href="assets/images/favicon.svg" type="image/svg+xml">
 </head>
 <body>
-  <header>
-    <img src="assets/images/logo.png" alt="Big Fun Creative Logo" style="height: 100px;">
+  <!-- Hero Landing Section -->
+  <section class="hero">
+    <h1>Big Fun Creative</h1>
+    
+    <div class="hero-video-container">
+      <div class="hero-video-placeholder">
+        <!-- Replace this div with your 17-second highlight reel video -->
+        <!-- <video autoplay muted loop playsinline>
+          <source src="assets/videos/highlight-reel.mp4" type="video/mp4">
+        </video> -->
+        <p>Hero Highlight Reel Loop</p>
+      </div>
+    </div>
+    
+    <a href="#projects" class="cta-button">Explore Projects</a>
+    
+    <div class="scroll-indicator">↓</div>
+  </section>
+
+  <!-- Main Content -->
+  <header id="projects">
+    <img src="assets/images/logo.png" alt="Big Fun Creative Logo" class="logo">
     <h2 class="home-headline">
-  Big Fun Creative installs unique large interactive art,<br>
-  transforming spaces into delightful places<br>
-  of shared play and connection
-</h2>
-
+     Transforming spaces into delightful places<br>
+      of shared play and connection through<br>
+      unique large-scale interactive art
+    </h2>
   </header>
-  <main>
-    <div class="project-grid">
 
-      <a href="projects/shrooms.html">
-        <img src="assets/images/shrooms-logo.png" alt="Shrooms thumbnail">
-        <p>Serene Shrooms</p>
+  <main class="content-section">
+    <h2 class="section-title">Featured Installations</h2>
+    
+    <div class="project-grid">
+      <a href="projects/shrooms.html" class="project-card">
+        <img src="assets/images/shrooms-logo.png" alt="Serene Shrooms Installation">
+        <div class="project-info">
+          <p>Serene Shrooms</p>
+        </div>
       </a>
-      <a href="projects/starlords.html">
-        <img src="assets/images/starlords.png" alt="StarLords thumbnail">
-        <p>StarLords</p>
+
+      <a href="projects/bigpixel.html" class="project-card">
+        <img src="assets/images/bigpixel.webp" alt="BigPixel Display">
+        <div class="project-info">
+          <p>BigPixel Display</p>
+        </div>
       </a>
-      <a href="projects/lucky-13.html">
-        <img src="assets/images/lucky-13.png" alt="Lucky 13 thumbnail">
-        <p>Lucky-13</p>
+
+      <a href="projects/starlords.html" class="project-card">
+        <img src="assets/images/starlords.png" alt="StarLords Installation">
+        <div class="project-info">
+          <p>StarLords</p>
+        </div>
       </a>
-      <a href="projects/gmm.html">
-        <img src="assets/images/gmmdr-logo.png" alt="GMMDR thumbnail">
-        <p>Giant Marble Machine Drag Race</p>
+
+      <a href="projects/lucky-13.html" class="project-card">
+        <img src="assets/images/lucky-13.png" alt="Lucky 13 Installation">
+        <div class="project-info">
+          <p>Lucky 13</p>
+        </div>
       </a>
-      <a href="projects/bigpixel.html">
-        <img src="assets/images/bigpixel.webp" alt="Bigpixel thumbnail">
-        <p>BigPixel</p>
+
+      <a href="projects/gmm.html" class="project-card">
+        <img src="assets/images/gmmdr-logo.png" alt="Giant Marble Machine Drag Race">
+        <div class="project-info">
+          <p>Giant Marble Machine</p>
+        </div>
       </a>
-      <a href="projects/scrabble.html">
-        <img src="assets/images/scrabble-logo.png" alt="BigScrabble thumbnail">
-        <p>BigScrabble</p>
+
+      <a href="projects/tunnel.html" class="project-card">
+        <img src="assets/images/logo.png" alt="Ghost Tunnel Installation">
+        <div class="project-info">
+          <p>Ghost Tunnel</p>
+        </div>
       </a>
-      <a href="projects/vaseprinter.html">
-        <img src="assets/images/logo.png" alt="Vaseprinter thumbnail">
-        <p>VasePrinter</p>
+
+      <a href="projects/scrabble.html" class="project-card">
+        <img src="assets/images/scrabble-logo.png" alt="BigScrabble Installation">
+        <div class="project-info">
+          <p>BigScrabble</p>
+        </div>
+      </a>
+
+      <a href="projects/slotmachine.html" class="project-card">
+        <img src="assets/images/logo.png" alt="Slot Machine Installation">
+        <div class="project-info">
+          <p>Slot Machine</p>
+        </div>
       </a>
     </div>
   </main>
+
   <footer>
-  <p>These projects would not be possible without the support of:</p>
-  
-  <ul class="supporter-list">
-    <li>
-      <a href="https://www.ingenuitycleveland.org/programs/ingenuitylabs/">
-        <img src="https://www.google.com/s2/favicons?domain=www.ingenuitycleveland.org" alt="Ingenuity Cleveland Favicon" class="favicon">
-        Ingenuity Labs
-      </a>
-    </li>
-    <li>
-      <a href="https://case.edu/thinkbox/">
-        <img src="https://www.google.com/s2/favicons?domain=case.edu" alt="Case Western Reserve University Favicon" class="favicon">
-        Case ThinkBox
-      </a>
-    </li>
-    <li>
-      <a href="https://cpl.org/service/makerspace/">
-        <img src="https://www.google.com/s2/favicons?domain=cpl.org" alt="Cleveland Public Library Favicon" class="favicon">
-        Cleveland Public Library Makerspace
-      </a>
-    </li>
-  </ul>
-</footer>
+    <p>These projects would not be possible without the support of:</p>
+    
+    <ul class="supporter-list">
+      <li>
+        <a href="https://www.ingenuitycleveland.org/programs/ingenuitylabs/" target="_blank" rel="noopener">
+          <img src="https://www.google.com/s2/favicons?domain=www.ingenuitycleveland.org" alt="" class="favicon">
+          Ingenuity Labs
+        </a>
+      </li>
+      <li>
+        <a href="https://case.edu/thinkbox/" target="_blank" rel="noopener">
+          <img src="https://www.google.com/s2/favicons?domain=case.edu" alt="" class="favicon">
+          Case ThinkBox
+        </a>
+      </li>
+      <li>
+        <a href="https://cpl.org/service/makerspace/" target="_blank" rel="noopener">
+          <img src="https://www.google.com/s2/favicons?domain=cpl.org" alt="" class="favicon">
+          Cleveland Public Library Makerspace
+        </a>
+      </li>
+    </ul>
+  </footer>
 </body>
 </html>

@@ -112,8 +112,26 @@ header {
 }
 
 .logo {
-  height: 400px;
-  margin-bottom: 1.5rem;
+  width: 100%;
+  max-width: 860px;  /* Original artwork width */
+  height: auto;      /* Maintains aspect ratio */
+  margin: 0 auto 1.5rem;
+  display: block;
+}
+
+/* Optional: Add some constraints for very large screens */
+@media (min-width: 1400px) {
+  .logo {
+    max-width: 860px;
+  }
+}
+
+/* Ensure it doesn't get too small on mobile */
+@media (max-width: 480px) {
+  .logo {
+    max-width: 100%;
+    padding: 0 1rem;  /* Add some breathing room */
+  }
 }
 
 .home-headline {

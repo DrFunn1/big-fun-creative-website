@@ -1,32 +1,114 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>BigPixel</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BigPixel Display - Big Fun Creative</title>
   <link rel="stylesheet" href="../assets/css/style.css">
+  <link rel="icon" href="../assets/images/favicon.svg" type="image/svg+xml">
 </head>
 <body>
-  <header>
-    <h1>BigPixel</h1>
+  <header class="project-header">
+    <a href="../index.html" class="back-link">← Back to Projects</a>
+    <h1>BigPixel Display</h1>
   </header>
-  <main>
-    <section><h2>Gallery</h2><p>Slideshow here (points to pix/)</p></section>
-    <section><h2>Description</h2><p>BigPixel is a large and beautiful lighting display made of up-cycled one gallon empty plastic water jugs. The lightweight and modular design allows for easy transport and assembly into different shapes. Brought to you by Makers Alliance, Ingenuity Ingeneers, think[box] and Plastipak.</p></section>
-    <section><h2>Videos</h2>
-      <p><div style="padding:56.25% 0 0 0;position:relative;"><iframe src="https://player.vimeo.com/video/1015964245?badge=0&amp;autopause=0&amp;player_id=0&amp;app_id=58479" frameborder="0" allow="autoplay; fullscreen; picture-in-picture; clipboard-write; encrypted-media; web-share" referrerpolicy="strict-origin-when-cross-origin" style="position:absolute;top:0;left:0;width:100%;height:100%;" title="BigPixel"></iframe></div><script src="https://player.vimeo.com/api/player.js"></script></p>
-      <p><div style="padding:56.25% 0 0 0;position:relative;"><iframe src="https://player.vimeo.com/video/1008549416?badge=0&amp;autopause=0&amp;player_id=0&amp;app_id=58479" frameborder="0" allow="autoplay; fullscreen; picture-in-picture; clipboard-write; encrypted-media; web-share" referrerpolicy="strict-origin-when-cross-origin" style="position:absolute;top:0;left:0;width:100%;height:100%;" title="Making the BigPixel Display"></iframe></div><script src="https://player.vimeo.com/api/player.js"></script></p>
+
+  <main class="project-content">
+    
+    <!-- Description Section -->
+    <section class="project-section">
+      <h2>Description</h2>
+      <p>
+        BigPixel is a large and beautiful lighting display made of up-cycled one gallon empty plastic water jugs. The lightweight and modular design allows for easy transport and assembly into different shapes. 
+      </p>
+      <p>
+        This innovative installation transforms recycled materials into a stunning interactive display system, demonstrating the creative potential of sustainable design while providing a versatile platform for digital art and gaming experiences.
+      </p>
     </section>
-    <section><h2>Placements</h2>
-      <ul><li>Ingenuity Fest 2024, September, 2024</li></ul>
-      <ul><li>Cavaliers STEM Day, Tower City, March 16, 2025</li></ul>
-      <ul><li>Guardians STEM Day, Progressive Field, May 14, 2025</li></ul>
-      <ul><li>Ingenuity Bal, , 2025</li></ul>
-      <ul><li>Content Creator Camp, Cleveland Public Library, Martin Luther King Branch, May 24, 2025</li></ul>
-      <ul><li>Ingenuity Fest 2025, September, 2025</li></ul>
+
+    <!-- Gallery Section -->
+    <section class="project-section">
+      <h2>Gallery</h2>
+      <div class="gallery-grid">
+        <!-- Add your images here -->
+        <!-- Example:
+        <img src="../assets/images/bigpixel/image-01.jpg" alt="BigPixel Display">
+        <img src="../assets/images/bigpixel/image-02.jpg" alt="BigPixel at event">
+        <img src="../assets/images/bigpixel/image-03.jpg" alt="Close-up detail">
+        -->
+      </div>
     </section>
-    <section><h2>Status</h2><p>Available</p></section>
-    <section><h2>Team</h2><p>Designer: Ed Morra<br>Team: Saaman K, Sam Harmon, James Cupp, Brian Gessler, Jenny, Bob Maher, Ian, Frank Lizanich, Tom Stoll, Jeff and Laren, Katherine, Andrew Horvat, </p></section>
+
+    <!-- Videos Section -->
+    <section class="project-section">
+      <h2>Videos</h2>
+      
+      <div class="video-container">
+        <div style="padding:56.25% 0 0 0;position:relative;">
+          <iframe src="https://player.vimeo.com/video/1015964245?badge=0&amp;autopause=0&amp;player_id=0&amp;app_id=58479" frameborder="0" allow="autoplay; fullscreen; picture-in-picture; clipboard-write; encrypted-media; web-share" referrerpolicy="strict-origin-when-cross-origin" style="position:absolute;top:0;left:0;width:100%;height:100%;" title="BigPixel"></iframe>
+        </div>
+      </div>
+      
+      <div class="video-container">
+        <div style="padding:56.25% 0 0 0;position:relative;">
+          <iframe src="https://player.vimeo.com/video/1008549416?badge=0&amp;autopause=0&amp;player_id=0&amp;app_id=58479" frameborder="0" allow="autoplay; fullscreen; picture-in-picture; clipboard-write; encrypted-media; web-share" referrerpolicy="strict-origin-when-cross-origin" style="position:absolute;top:0;left:0;width:100%;height:100%;" title="Making the BigPixel Display"></iframe>
+        </div>
+      </div>
+      
+      <script src="https://player.vimeo.com/api/player.js"></script>
+    </section>
+
+    <!-- Technical Details Section -->
+    <section class="project-section">
+      <h2>Technical Details</h2>
+      <ul>
+        <li><strong>Dimensions:</strong> 2x2-1/2x1 foot panels make a modular system, configurable to various sizes</li>
+        <li><strong>Materials:</strong> Up-cycled one-gallon plastic water jugs and coraplast frames, LED lighting, custom electronics</li>
+        <li><strong>Interactivity:</strong> Programmable LED matrix for games, animations, and visual displays</li>
+        <li><strong>Technology:</strong> LED matrix control via ESP-32 running as ArtNet node, real-time graphics rendering, modular assembly system</li>
+        <li><strong>Fabrication Time:</strong> 12 months</li>
+        <li><strong>Sustainability:</strong> Built from recycled materials, demonstrating eco-friendly design principles</li>
+      </ul>
+    </section>
+
+    <!-- Placements Section -->
+    <section class="project-section">
+      <h2>Placements</h2>
+      <ul>
+        <li>Ingenuity Fest 2024, Cleveland, OH - September 2024</li>
+        <li>Cavaliers STEM Day, Tower City, Cleveland, OH - March 16, 2025</li>
+        <li>Guardians STEM Day, Progressive Field, Cleveland, OH - May 14, 2025</li>
+        <li>Ingenuity Bal, Cleveland, OH - 2025</li>
+        <li>Content Creator Camp, Cleveland Public Library, Martin Luther King Branch - May 24, 2025</li>
+        <li>Ingenuity Fest 2025, Cleveland, OH - September 2025</li>
+      </ul>
+    </section>
+
+    <!-- Status Section -->
+    <section class="project-section">
+      <h2>Status</h2>
+      <span class="status-badge status-available">Available for Installation</span>
+      
+      <p style="margin-top: 1rem;">
+        The BigPixel Display is currently available for installations and events. Its modular design allows for custom configurations to suit different venues and creative visions.
+      </p>
+    </section>
+
+    <!-- Team Section -->
+    <section class="project-section">
+      <h2>Team</h2>
+      <div class="team-list">
+        <p><strong>Designer & Lead:</strong> Ed Morra</p>
+        <p><strong>Team:</strong> Saaman K, Sam Harmon, James Cupp, Brian Gessler, Jenny, Bob Maher, Ian, Frank Lizanich, Tom Stoll, Jeff and Laren, Katherine, Andrew Horvat</p>
+        <p><strong>Technical Support:</strong> Ingenuity Labs, Makers Alliance, Case ThinkBox, Plastipak</p>
+      </div>
+    </section>
+
   </main>
+
+  <footer>
+    <p>Big Fun Creative • Interactive Art Installations</p>
+    <p><a href="../index.html" style="color: #667eea; text-decoration: none;">View All Projects</a></p>
+  </footer>
 </body>
 </html>

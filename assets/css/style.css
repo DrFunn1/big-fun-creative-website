@@ -386,6 +386,54 @@ footer .designer-credit {
   transform: translateY(0);
 }
 
+/* Contact Button Wrapper - Separated from supporter list */
+.contact-button-wrapper {
+  text-align: center;
+  margin-top: 2.5rem;
+  padding-top: 2rem;
+  border-top: 2px solid #e0e0e0;
+}
+
+/* Primary Contact Button - Outlined Style */
+.contact-button-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem 2.5rem;
+  background: white;
+  color: #667eea;
+  border: 2px solid #667eea;
+  border-radius: 50px;
+  font-weight: 600;
+  font-size: 1.1rem;
+  cursor: pointer;
+  transition: transform 0.3s ease, box-shadow 0.3s ease, background-color 0.3s ease, color 0.3s ease;
+  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.15);
+  font-family: inherit;
+}
+
+.contact-button-primary:hover {
+  background: #667eea;
+  color: white;
+  transform: translateY(-3px);
+  box-shadow: 0 8px 25px rgba(102, 126, 234, 0.3);
+}
+
+.contact-button-primary:active {
+  transform: translateY(-1px);
+}
+
+.contact-icon {
+  font-size: 1.3rem;
+  margin-right: 0.5rem;
+}
+
+.contact-location {
+  margin-top: 0.75rem;
+  font-size: 0.95rem;
+  color: #666;
+}
+
 /* Project Detail Page Styles */
 .project-header {
   background: white;

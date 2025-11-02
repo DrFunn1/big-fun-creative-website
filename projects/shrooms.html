@@ -144,14 +144,78 @@
     </section>
   </main>
 
+<!-- Dynamic Footer -->
   <div id="footer-placeholder"></div>
 
-<script>
-  fetch('../footer.html')  // or './footer.html' for index.html
-    .then(response => response.text())
-    .then(data => {
-      document.getElementById('footer-placeholder').innerHTML = data;
+  <script>
+    fetch('../footer.html')
+      .then(response => response.text())
+      .then(data => {
+        document.getElementById('footer-placeholder').innerHTML = data;
+      });
+  </script>
+
+  <!-- Formspree Contact Button -->
+  <script src="https://formspree.io/js/formbutton-v1.min.js" defer></script>
+  <script>
+    /* paste this line in verbatim */
+    window.formbutton=window.formbutton||function(){(formbutton.q=formbutton.q||[]).push(arguments)};
+    /* customize formbutton below*/     
+    formbutton("create", {
+      action: "https://formspree.io/f/xovprvvw",
+      title: "Get in Touch with Ed",
+      buttonText: "Contact Us",
+      fields: [
+        { 
+          type: "text", 
+          label: "Name:", 
+          name: "name",
+          required: true,
+          placeholder: "Your name"
+        },
+        { 
+          type: "email", 
+          label: "Email:", 
+          name: "email",
+          required: true,
+          placeholder: "your@email.com"
+        },
+        {
+          type: "text",
+          label: "Organization:",
+          name: "organization",
+          placeholder: "Your organization (optional)"
+        },
+        {
+          type: "textarea",
+          label: "Message:",
+          name: "message",
+          required: true,
+          placeholder: "Tell us about your project, event, or inquiry..."
+        },
+        { type: "submit" }      
+      ],
+      styles: {
+        title: {
+          backgroundColor: "#667eea",
+          color: "#ffffff"
+        },
+        button: {
+          backgroundColor: "#667eea",
+          color: "#ffffff",
+          fontSize: "16px",
+          fontWeight: "600",
+          borderRadius: "50px",
+          padding: "12px 30px",
+          boxShadow: "0 4px 15px rgba(102, 126, 234, 0.4)"
+        },
+        buttonHover: {
+          backgroundColor: "#764ba2"
+        }
+      },
+      initiallyVisible: false
     });
-</script>
+  </script>
 </body>
-</html> 
+</html>
+ 

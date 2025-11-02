@@ -267,6 +267,17 @@ footer p {
   flex-shrink: 0;
 }
 
+/* Footer contact info styles */
+footer .contact-info {
+  margin-top: 2rem;
+}
+
+footer .designer-credit {
+  font-size: 0.9rem;
+  color: #999;
+  margin-top: 0.5rem;
+}
+
 /* Project Detail Page Styles */
 .project-header {
   background: white;

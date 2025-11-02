@@ -98,40 +98,110 @@
     </div>
   </main>
 
-  <footer>
-    <p>These projects would not be possible without the support of:</p>
-    
-    <ul class="supporter-list">
-      <li>
-        <a href="https://www.ingenuitycleveland.org/engage/ingeneers/" target="_blank" rel="noopener">
-          <img src="https://www.google.com/s2/favicons?domain=www.ingenuitycleveland.org" alt="" class="favicon">
-          The Ingeneers
-        </a>
-      <li>
-        <a href="https://www.ingenuitycleveland.org/programs/ingenuitylabs/" target="_blank" rel="noopener">
-          <img src="https://www.google.com/s2/favicons?domain=www.ingenuitycleveland.org" alt="" class="favicon">
-          Ingenuity Labs
-        </a>
-      </li>
-      <li>
-        <a href="http://alpha.makersalliance.org/" target="_blank" rel="noopener">
-          <img src="https://www.google.com/s2/favicons?domain=alpha.makersalliance.org" alt="" class="favicon">
-          Makers’ Alliance
-        </a>
-      </li>
-      <li>
-        <a href="https://case.edu/thinkbox/" target="_blank" rel="noopener">
-          <img src="https://www.google.com/s2/favicons?domain=case.edu" alt="" class="favicon">
-          Case ThinkBox
-        </a>
-      </li>
-      <li>
-        <a href="https://cpl.org/service/makerspace/" target="_blank" rel="noopener">
-          <img src="https://www.google.com/s2/favicons?domain=cpl.org" alt="" class="favicon">
-          CPL Makerspace
-        </a>
-      </li>
-    </ul>
-  </footer>
+  <!-- Dynamic Footer -->
+  <div id="footer-placeholder"></div>
+
+  <script>
+    fetch('./footer-home.html')
+      .then(response => response.text())
+      .then(data => {
+        document.getElementById('footer-placeholder').innerHTML = data;
+        
+        // Initialize contact modal and form after footer loads
+        const contactButton = document.getElementById('contact-button');
+        const modal = document.getElementById('contact-modal');
+        const closeButton = document.getElementById('close-modal');
+        const form = document.getElementById('contact-form');
+        const formStatus = document.getElementById('form-status');
+        
+        if (contactButton && modal && closeButton && form) {
+          // Open modal when contact button is clicked
+          contactButton.addEventListener('click', function(e) {
+            e.preventDefault();
+            modal.style.display = 'flex';
+          });
+          
+          // Close modal when X is clicked
+          closeButton.addEventListener('click', function() {
+            modal.style.display = 'none';
+            form.reset();
+            formStatus.style.display = 'none';
+          });
+          
+          // Close modal when clicking outside the form
+          modal.addEventListener('click', function(e) {
+            if (e.target === modal) {
+              modal.style.display = 'none';
+              form.reset();
+              formStatus.style.display = 'none';
+            }
+          });
+          
+          // Close modal on Escape key
+          document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape' && modal.style.display === 'flex') {
+              modal.style.display = 'none';
+              form.reset();
+              formStatus.style.display = 'none';
+            }
+          });
+          
+          // Handle form submission with AJAX
+          form.addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(form);
+            const submitButton = form.querySelector('button[type="submit"]');
+            
+            // Disable submit button and show loading state
+            submitButton.disabled = true;
+            submitButton.textContent = 'Sending...';
+            formStatus.style.display = 'none';
+            
+            fetch(form.action, {
+              method: 'POST',
+              body: formData,
+              headers: {
+                'Accept': 'application/json'
+              }
+            })
+            .then(response => {
+              if (response.ok) {
+                // Success
+                formStatus.style.display = 'block';
+                formStatus.style.backgroundColor = '#d4edda';
+                formStatus.style.color = '#155724';
+                formStatus.textContent = 'Thank you! Your message has been sent successfully.';
+                form.reset();
+                
+                // Close modal after 2 seconds
+                setTimeout(function() {
+                  modal.style.display = 'none';
+                  formStatus.style.display = 'none';
+                }, 2000);
+              } else {
+                throw new Error('Form submission failed');
+              }
+            })
+            .catch(error => {
+              // Error
+              formStatus.style.display = 'block';
+              formStatus.style.backgroundColor = '#f8d7da';
+              formStatus.style.color = '#721c24';
+              formStatus.textContent = 'Oops! There was a problem sending your message. Please try again.';
+            })
+            .finally(() => {
+              // Re-enable submit button
+              submitButton.disabled = false;
+              submitButton.textContent = 'Send Message';
+            });
+          });
+        }
+      })
+      .catch(error => {
+        console.error('Error loading footer:', error);
+      });
+  </script>
 </body>
 </html>
+
